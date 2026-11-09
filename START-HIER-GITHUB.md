@@ -15,3 +15,7 @@ Nur `web/app.js` und `web/index.html` aus dem Update-ZIP in den gleichnamigen Pf
 ## GitHub-Update v11
 
 Für das v11-Update die Dateien `web/app.js` und `web/index.html` aus dem separaten Update-ZIP an denselben Pfaden im Repository `Gamd25/episoden-gluecksrad` ersetzen. Erfolgreiche Veröffentlichung unter GitHub Actions abwarten, Seite neu laden und auf „v11 · JS geladen“ prüfen. Keine Firestore-Regeländerungen erforderlich.
+
+## GitHub-Update v12 – Ergebnis erst nach dem Drehen
+
+Im GitHub-Repository `Gamd25/episoden-gluecksrad` nur die zwei Dateien `web/app.js` und `web/index.html` aus dem v12-Update-ZIP an gleicher Stelle ersetzen. Nach GitHub-Actions-Deploy die Seite mit Strg+F5 öffnen und die sichtbare Kennung `v12 · JS geladen` prüfen. Die Ergebnisbox bleibt nach Freigabe zunächst unsichtbar und erscheint erst nach Abschluss des aktiv gestarteten Glücksrad-Drehs. Beim Wiederöffnen der Seite wird die Zuordnung unverändert geladen, aber zum Anzeigen muss erneut gedreht werden. Firestore-Regeln müssen nicht verändert werden.

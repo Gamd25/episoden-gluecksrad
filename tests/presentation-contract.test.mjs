@@ -8,12 +8,15 @@ test('published episode is restored from Firestore result for the current uid',(
   assert.match(app,/resolveStoredAssignment\(snap\.data\(\),wheelEpisodes,subscribedUid\)/u);
   assert.match(app,/\$\('episodeName'\)\.textContent=assignment\.label/u);
 });
-test('result appears independently of wheel animation',()=>{
-  const subscribe=app.slice(app.indexOf('function subscribeResult()'),app.indexOf('function renderWheel('));
-  assert.match(subscribe,/show\('myEpisode'\)/u);
+test('result appears only after a completed spin, never on subscription',()=>{
+  const subscribe=app.slice(app.indexOf('function subscribeResult()'),app.indexOf('function resetWheelSession()'));
+  assert.doesNotMatch(subscribe,/show\('myEpisode'\)/u);
+  assert.match(subscribe,/hide\('myEpisode'\)/u);
   const start=app.slice(app.indexOf('function startWheel('));
-  assert.doesNotMatch(start,/hide\('myEpisode'\)/u);
+  assert.match(start,/hide\('myEpisode'\)/u);
   assert.match(start,/localStorage\.setItem\(key,'1'\)/u);
+  const finish=start.slice(start.indexOf('function finish()'),start.indexOf('if(!duration){finish()'));
+  assert.match(finish,/show\('myEpisode'\)/u);
 });
 test('episode list defaults to actual separate lines, not literal backslash n',()=>{
   assert.ok(html.includes(['>Episode 1','Episode 2','Episode 3','Episode 4','Episode 5</textarea>'].join('\n')));

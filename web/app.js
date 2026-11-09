@@ -24,7 +24,7 @@ const originalWheelAudio=createOriginalWheelAudio();
 let studentWatchSerial=0; // Ungueltige alte Listener- und Serverantworten nicht auf aktuelle Anmeldungen anwenden.
 let toastTimer;
 const deletingRoundIds = new Set();
-const BUILD_VERSION = 'v11';
+const BUILD_VERSION = 'v12';
 const teacherProvider = new GoogleAuthProvider();
 teacherProvider.setCustomParameters({prompt:'select_account'});
 function toast(message,ms=5000){ const e=$('globalStatus');e.textContent=message;show('globalStatus');clearTimeout(toastTimer);toastTimer=setTimeout(()=>hide('globalStatus'),ms); }
@@ -365,7 +365,7 @@ function watchStudent({alreadyVerified=false}={}){
     $('studentEyebrow').textContent=data.title||'Deine Gruppeneinteilung';
     wheelEpisodes=data.episodes||[];
     if(data.state==='published'){wheelReleased=true;originalWheelAudio.preload();hide('studentWaiting');hide('waitingSidebar');show('studentResult');$('studentHeading').textContent='Deine Auslosung';$('studentSub').textContent='Die Lehrperson hat den Check-in abgeschlossen.';subscribeResult();}
-    else {wheelReleased=false;spinTarget=null;hide('spinWheelBtn');$('spinWheelBtn').disabled=true;show('studentWaiting');show('waitingSidebar');hide('studentResult');$('studentHeading').textContent=data.state==='closing'?'Die Auslosung wird vorbereitet …':'Du bist dabei!';$('studentSub').textContent=data.state==='closing'?'Dein Check-in wurde übernommen. Die Auslosung wird vorbereitet.':'Dein Check-in wurde übernommen. Alle eingecheckten Personen warten gemeinsam auf die Freigabe.';}
+    else {wheelReleased=false;spinTarget=null;hide('myEpisode');hide('spinWheelBtn');$('spinWheelBtn').disabled=true;show('studentWaiting');show('waitingSidebar');hide('studentResult');$('studentHeading').textContent=data.state==='closing'?'Die Auslosung wird vorbereitet …':'Du bist dabei!';$('studentSub').textContent=data.state==='closing'?'Dein Check-in wurde übernommen. Die Auslosung wird vorbereitet.':'Dein Check-in wurde übernommen. Alle eingecheckten Personen warten gemeinsam auf die Freigabe.';}
   },e=>setStudentError('Status: '+message(e))));
   studentUnsubs.push(onSnapshot(collection(roundRef,'presence'),snap=>{
     const people=snap.docs.map(d=>d.data()).sort((a,b)=>namesSorter.compare(a.name,b.name));
@@ -380,25 +380,26 @@ function subscribeResult(){
   resultUnsub=onSnapshot(doc(db,'sharedRounds',subscribedRound,'results',subscribedUid),snap=>{
     if(subscribedRound!==studentRoundId || subscribedUid!==user?.uid || !studentIdentity)return;
     if(!snap.exists()){
-      spinTarget=null;hide('spinWheelBtn');$('spinWheelBtn').disabled=true;
+      spinTarget=null;hide('myEpisode');hide('spinWheelBtn');$('spinWheelBtn').disabled=true;
       $('spinningLabel').textContent='Deine freigegebene Episode wird geladen …';
       show('spinningLabel');
       return;
     }
     let assignment;
     try{assignment=resolveStoredAssignment(snap.data(),wheelEpisodes,subscribedUid);}
-    catch(e){setStudentError(message(e));return;}
+    catch(e){hide('myEpisode');setStudentError(message(e));return;}
     const assignmentKey=`${subscribedRound}:${subscribedUid}:${assignment.episodeId}`;
     studentEpisode=snap.data();
     // Nur die geprüfte, veröffentlichte Firestore-Zuordnung ist ein Radziel.
     spinTarget={roundId:subscribedRound,uid:subscribedUid,index:assignment.index,episodeId:assignment.episodeId};
     show('studentResult');
-    // Wichtig: Die dauerhafte Textanzeige hängt ausschließlich an dem aus
-    // Firestore geladenen Ergebnis, NICHT am Animationsende oder an localStorage.
+    // Firestore bestimmt nur das unveränderliche Radziel. Die Ergebnisbox
+    // darf erst NACH einer vom Schüler ausgelösten, abgeschlossenen Drehung
+    // erscheinen. Ein Snapshot oder ein Neuöffnen enthüllt sie nicht vorab.
+    if(shownAssignment===assignmentKey)return;
+    hide('myEpisode');
     $('episodeName').textContent=assignment.label;
     $('resultOwner').textContent=`Für ${studentIdentity.name}`;
-    show('myEpisode');
-    if(shownAssignment===assignmentKey)return;
     shownAssignment=assignmentKey;
     renderWheel(wheelEpisodes,currentRotation);
     $('spinningLabel').textContent='';
@@ -418,6 +419,9 @@ function resetWheelSession(){
   hide('spinWheelBtn');
   $('spinningLabel').textContent='';
   hide('spinningLabel');
+  hide('myEpisode');
+  $('episodeName').textContent='';
+  $('resultOwner').textContent='';
 }
 function spinWheelAgain(){
   if(!canSpinStoredWheel({published:wheelReleased,target:spinTarget,uid:user?.uid,roundId:studentRoundId,spinning,episodes:wheelEpisodes})){
@@ -456,6 +460,8 @@ function startWheel(index){
     throw new Error('Keine bestätigte Episodenzuteilung für dieses Rad verfügbar.');
   }
   spinning=true;
+  hide('myEpisode'); // Auch bei erneutem Drehen erst nach dem Stopp anzeigen.
+  const visibleAssignment=`${studentRoundId}:${user.uid}:${spinTarget.episodeId}`;
   const button=$('spinWheelBtn');button.disabled=true;button.textContent='Rad dreht …';
   const key=visitedWheelKey(studentRoundId,user.uid);
   const turns=chooseVisualTurns();
@@ -464,7 +470,7 @@ function startWheel(index){
   const duration=window.matchMedia('(prefers-reduced-motion: reduce)').matches?0:ORIGINAL_WHEEL_SETTINGS.durationMs;
   $('spinningLabel').textContent=duration?'Das Glücksrad dreht …':'';
   if(duration)show('spinningLabel');else hide('spinningLabel');
-  // Die Ergebnisbox bleibt während des Drehens sichtbar und unverändert.
+  // Die Ergebnisbox bleibt während der gesamten Drehung unsichtbar.
   if(duration)originalWheelAudio.startRattle();
   let finished=false;
   function finish(){
@@ -475,7 +481,14 @@ function startWheel(index){
     $('spinningLabel').textContent='';
     hide('spinningLabel');
     try { localStorage.setItem(key,'1'); } catch { /* Browser blockiert Speicherung */ }
-    spinning=false;button.textContent='Noch einmal drehen';
+    spinning=false;
+    // Resultat nur nach dem Ende einer gültigen Drehung der aktuellen Runde
+    // zeigen, niemals durch das bloße Laden der gespeicherten Zuteilung.
+    if(wheelReleased && studentIdentity && user?.uid===spinTarget?.uid &&
+       studentRoundId===spinTarget.roundId && shownAssignment===visibleAssignment){
+      show('myEpisode');
+    }
+    button.textContent='Noch einmal drehen';
     button.disabled=!canSpinStoredWheel({published:wheelReleased,target:spinTarget,uid:user?.uid,roundId:studentRoundId,spinning,episodes:wheelEpisodes});
   }
   if(!duration){finish();return;}

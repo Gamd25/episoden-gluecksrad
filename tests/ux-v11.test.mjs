@@ -12,7 +12,7 @@ test('no supplemental explanation near the student wheel spin button',()=>{
   assert.match(result,/id="myEpisode"/);
 });
 test('v11 runs new script and retains visible build identification',()=>{
-  assert.match(app,/BUILD_VERSION = 'v11'/);
-  assert.match(html,/Lädt v11/);
-  assert.match(html,/app\.js\?v=11-20261109/);
+  assert.match(app,/BUILD_VERSION = 'v12'/);
+  assert.match(html,/Lädt v12/);
+  assert.match(html,/app\.js\?v=12-20261109/);
 });
