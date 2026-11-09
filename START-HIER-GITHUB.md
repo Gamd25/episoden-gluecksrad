@@ -1,27 +1,11 @@
-# Episoden-Glücksrad mit GitHub Pages + Firebase Spark
+# START HIER – Gemeinsamer Klassenlink (GitHub Pages + Firebase Spark)
 
-Diese Variante ist für das **neue** GitHub-Repository `Gamd25/episoden-gluecksrad` vorgesehen. Das alte Repository `Gamd25/gefuehle-rad` bleibt unverändert. Firebase-Projekt: **episoden-gluecksrad** (bereits in `web/config.js` eingetragen).
+**Keine Installation von Node.js nötig.** Das vorhandene `episoden-gluecksrad`-Repository und das vorhandene Firebase-Projekt weiterverwenden. Das ursprüngliche `gefuehle-rad` bleibt unverändert.
 
-## Die fünf Schritte
+1. Firebase Console → `episoden-gluecksrad` → **Cloud Firestore → Regeln**: `firestore.rules` vollständig in den Regeleditor kopieren und auf **Veröffentlichen** klicken. Die bisherigen `/rounds`-Regeln sind in dieser neuen Datei enthalten.
+2. In GitHub `Gamd25/episoden-gluecksrad` die fünf Dateien `web/index.html`, `web/app.js`, `web/style.css`, `web/shared-backend.js` und `web/shared-logic.js` aktualisieren/hinzufügen. Bei Bedarf GitHub Desktop nutzen, um Änderungen in einem Commit hochzuladen. `web/config.js` und `.github/workflows/pages.yml` unverändert lassen.
+3. GitHub → **Actions** prüfen: der Pages-Workflow muss ein grünes Häkchen haben.
+4. `https://gamd25.github.io/episoden-gluecksrad/` aufrufen, als Lehrperson anmelden, Test-Runde erstellen und einen **gemeinsamen Klassenlink** kopieren.
+5. Mit **erfundenen** Namen auf zwei anderen Browsern testen. Ein Name soll nur einmal funktionieren, die Teilnehmendenliste soll erst nach Check-in erscheinen, Ergebnisse erst nach ausdrücklichem Abschluss.
 
-1. Unter https://github.com/new ein **neues öffentliches Repository** `episoden-gluecksrad` anlegen (GitHub-Free-Pages verwendet öffentliche Repositories). Nicht das bestehende Gefühls-Rad-Repository verwenden. Am besten zunächst ohne README, .gitignore oder Lizenz anlegen.
-2. ZIP auf dem eigenen Rechner **entpacken** und die Dateien/Ordner einschließlich des versteckten Ordners `.github` ins neue Repository bringen. Am einfachsten mit **GitHub Desktop**: `File > Add local repository` bzw. ein Git-Repository aus dem entpackten Ordner initialisieren, neues Repository über Desktop veröffentlichen. Alternativ über Git im Terminal: `git init -b main`, `git add .`, `git commit -m "Episoden-Glücksrad Spark + GitHub Pages"`, `git remote add origin https://github.com/Gamd25/episoden-gluecksrad.git`, `git push -u origin main` (dafür braucht man Git, eingerichtete Benutzeridentität und GitHub-Zugang). **Die ZIP selbst nicht als einzelne Datei hochladen.**
-3. Neues Repository > **Settings > Pages > Build and deployment > Source: GitHub Actions**. Der mitgelieferte Workflow `.github/workflows/pages.yml` veröffentlicht **nur** den Inhalt von `web/` als GitHub Pages. Falls der Workflow schon ausgeführt wurde, unter Actions den Deploy-Status prüfen.
-4. Firebase Console > Projekt `episoden-gluecksrad` > **Authentication > Settings > Authorized domains**: `gamd25.github.io` hinzufügen, **ohne `https://` und ohne Pfad**. Die Firebase-Webkonfiguration in `web/config.js` ist bereits richtig eingetragen. Bei einem anderen Repository-Besitzer dessen GitHub-Pages-Domain verwenden.
-5. **Node.js installieren** und `FIRESTORE-REGELN-AKTIVIEREN.cmd` ausführen, damit die Sicherheitsregeln in **deinem neuen Firebase-Projekt** installiert werden. Das ist ein einmaliger Backend-Schritt und erfordert Firebase-Login. Kein Blaze-Tarif und keine Cloud Functions nötig. Anschließend Test mit erfundenen Namen und mehreren Geräten.
-
-Wenn GitHub-Nutzer und Repository so lauten wie oben, ist die **voraussichtliche** Seitenadresse:
-
-`https://gamd25.github.io/episoden-gluecksrad/`
-
-Sie existiert erst nach erfolgreichem Pages-Deployment. Bei GitHub-Änderungen an `main` wird die Seite automatisch neu bereitgestellt.
-
-## Wichtige Hinweise
-
-- **GitHub Pages veröffentlicht keine Firestore-Regeln.** Diese müssen separat mit `FIRESTORE-REGELN-AKTIVIEREN.cmd` bereitgestellt werden.
-- `ALTERNATIV-FIREBASE-HOSTING.cmd` ist nur für den alternativen Weg über Firebase Hosting, **nicht** für den geplanten GitHub-Pages-Betrieb.
-- GitHub ist bei öffentlichen Repositorys öffentlich einsehbar. **Keine Schülerlisten, Zugangstokens, geheimen Schlüssel oder personenbezogenen Daten einchecken.** Die Firebase-Webkonfiguration `web/config.js` ist öffentlich und kein Admin-Schlüssel.
-- Persönliche Links werden erst im Lehrer-Browser erzeugt, nicht im GitHub-Repository gespeichert. Wer einen Link besitzt, kann ihn unter Umständen vor der richtigen Person einlösen; es gibt **keine** Moodle-Konto-Verifizierung.
-- Es gibt bisher **keinen** durchgeführten realen Firebase-/GitHub-Deployment- und Mehrgeräte-Sicherheitstest. Vor der Verwendung mit echten Schülernamen sind Test und Datenschutzprüfung zwingend.
-
-Originaldetails: `README.md`, `docs/TESTPLAN.md`, `docs/PRUEFSTATUS.md`.
+**Unbedingt beachten:** Der gemeinsame Link + freie Namenseingabe identifiziert keine realen Schülerinnen und Schüler verlässlich. Ein unbefugter Mensch mit dem Link kann sich als jemand anders ausgeben. Die Lehrperson muss vor dem Abschluss die anwesenden Personen gegen die Check-in-Liste prüfen. Für produktiven Einsatz mit echten Schülernamen sind Datenschutzfreigabe, Regeltests und Identitätskonzept erforderlich.

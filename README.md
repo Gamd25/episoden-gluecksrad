@@ -1,64 +1,47 @@
-# Episoden-Glücksrad – Spark-Version v2 (09.11.2026)
+# Episoden-Glücksrad – Spark v3: gemeinsamer Check-in-Link
 
-**Ohne Cloud Functions und ohne Blaze-Abo.** Eigenständige Webanwendung für das bereits erstellte Firebase-Projekt `episoden-gluecksrad` (Spark). Das ursprüngliche GitHub-Projekt `Gamd25/gefuehle-rad` wurde nicht verändert. Die ZIP enthält bereits die mitgeteilte Firebase-Webkonfiguration.
+**Stand: 09.11.2026.** Für das **neue** Repository `Gamd25/episoden-gluecksrad` und das **separate** Firebase-Projekt `episoden-gluecksrad`. Das ursprüngliche `Gamd25/gefuehle-rad` wird weder verändert noch überschrieben.
 
-## Sofort-Anleitung (Windows)
+## Neues Verhalten
 
-1. ZIP in einen neuen Ordner entpacken. Firebase-Projekt, Google-/Anonymous-Authentifizierung und Firestore sind bereits in der Firebase Console eingerichtet.
-2. Falls nicht installiert: **Node.js 22 oder neuer** von https://nodejs.org/ installieren.
-3. `JETZT-VEROEFFENTLICHEN.cmd` im entpackten Ordner doppelklicken. Die Datei verwendet `npx firebase-tools`, öffnet bei Bedarf die Firebase-Anmeldung und veröffentlicht **nur Firestore-Sicherheitsregeln und Firebase Hosting** in `episoden-gluecksrad`.
-4. Nach erfolgreicher Veröffentlichung https://episoden-gluecksrad.web.app im Browser öffnen. Bei Google-Login-Problemen in Firebase Authentication → Settings → Authorized domains prüfen, ob `episoden-gluecksrad.web.app` eingetragen ist.
-5. Mit **erfundenen Testnamen** eine Runde erstellen, 2–3 Links auf getrennten Geräten oder privaten Browserfenstern anklicken und die Auslosung prüfen. Erst nach einem echten Test mit mehreren Geräten und Datenschutzfreigabe Schülerdaten eingeben.
+1. Lehrperson meldet sich mit Google an und erstellt eine Runde mit einem Titel und 1–30 frei benannten Episoden. Es ist **keine vorab importierte Namensliste** nötig.
+2. Die Lehrperson kopiert den **einen gemeinsamen Klassenlink** aus den Rundendetails und verteilt ihn beispielsweise über Moodle.
+3. Schülerinnen und Schüler öffnen denselben Link, geben ihren eigenen Namen ein und klicken einmal auf **Ich bin dabei!**. Nach erfolgreicher Registrierung sehen sie die live aktualisierte Liste aller eingecheckten Namen. Besucher ohne erfolgreichen Check-in sehen diese Liste nicht.
+4. Firestore legt in **einer Transaktion** eine belegte normalisierte Namenskennung, die Sitzungsberechtigung und den angezeigten Check-in an. Ein Name kann in derselben Runde nicht zweimal belegt werden (Groß-/Kleinschreibung und mehrfache Leerzeichen werden angeglichen). Ein zweiter Klick derselben Sitzung führt nicht zu einem zweiten Eintrag.
+5. Die Lehrperson prüft die angezeigten Namen **gegen die tatsächlich Anwesenden**, entfernt gegebenenfalls falsche Einträge und beendet dann den Check-in ausdrücklich. Erst danach werden alle tatsächlich Eingecheckten zufällig und möglichst gleichmäßig verteilt.
+6. Die Auslosung ist im Lehrpersonen-Browser berechnet und wird **erst nach einem Firestore-Zustandsabschluss gemeinsam mit den Ergebnissen veröffentlicht**. Teilnehmende sehen nur ihre eigene Episode, die Lehrperson alle Gruppen.
+7. Die Lehrperson kann eine Runde inklusive ihrer zugehörigen Daten löschen.
 
-**Alternativ im Terminal:**
+### Wichtige Sicherheitsgrenze
 
-```bash
-npx --yes firebase-tools login
-npx --yes firebase-tools deploy --project episoden-gluecksrad --only firestore:rules,hosting
-```
+**Namenseingabe ist kein Identitätsnachweis.** Wer den Klassenlink besitzt, kann einen fremden Namen zuerst belegen oder weitere anonyme Browseridentitäten verwenden. Dies lässt sich allein mit GitHub Pages, Firebase Anonymous Auth und einer frei eingegebenen Namensangabe **nicht sicher ausschließen**. Die Lösung reduziert versehentliche Mehrfach-Check-ins und verhindert konkurrierende Belegungen derselben Namenskennung; sie beweist nicht eine Person = ein Konto. Für verifizierte Schüleridentität wäre eine von der Schule verwaltete Anmeldung (z. B. Moodle LTI/OIDC) oder ein individueller Zugang erforderlich.
 
-Der verwendete Firebase-Account benötigt Berechtigung zur Veröffentlichung dieses Projekts. Prüfe den Projektnamen vor dem Einsatz. Keine Cloud-Functions-Installation, kein Firebase-Blaze-Upgrade, keine Konto-/Service-Account-Schlüssel in diesem Paket.
+**Vor dem Einsatz mit echten Schülerdaten:** fachliche Datenschutzfreigabe (sichtbare Namensliste!), Berechtigungs-/Missbrauchsprüfung und ein echter Mehrgeräte-Test. Der Code wurde lokal syntaktisch und über Unit-Tests überprüft. Ein echter Firebase-Sicherheitsregel-Emulatortest und ein Live-Test wurden **nicht** durchgeführt.
 
-## Ablauf
+## Aktualisierung der bereits eingerichteten GitHub-Pages-Installation – OHNE Node.js
 
-1. Lehrperson meldet sich via Google an, erstellt eine Runde und gibt 1–160 unterschiedliche Personennamen sowie 1–30 frei benannte Episoden ein.
-2. Die Anwendung gibt einmalige, zufällige **persönliche Einladungslinks** als UTF-8-CSV aus. Sie müssen **individuell** übermittelt werden (nicht die ganze CSV an die Klasse geben).
-3. Jede Person öffnet ihren persönlichen Link, klickt **„Ich bin dabei!“** und wird per Firestore-Transaktion genau einmal gezählt. Reine Besucher ohne Check-in können die Liste der eingecheckten Namen nicht abrufen.
-4. Eingecheckte Personen sehen Namen und Anzahl der schon Eingecheckten. Episoden und Ergebnisse werden noch nicht ausgegeben.
-5. Die Lehrperson kontrolliert die Liste, kann einen Eintrag aufheben (dadurch wird ein neuer Link erzeugt) und vor dem Abschluss Episoden bearbeiten.
-6. Erst wenn die Lehrperson **„Check-in abschließen und auslosen“** auswählt, berechnet **ihr Browser** die Zuteilung per Web Crypto. In **einer Firestore-Transaktion** werden die gültigen Check-ins geprüft, die Episode je Person gespeichert und die Runde freigegeben. Bei einem konkurrierenden Check-in wird die Transaktion erneut ausgeführt; es gibt keine teilweise Veröffentlichung.
-7. Alle freigegebenen Teilnehmenden sehen nur ihre eigene Episode, animiert durch ein Rad. Die Lehrperson kann alle Gruppen als CSV exportieren und die Runde löschen.
+**A. Zuerst Firestore-Regeln (notwendig):** Firebase Console → Projekt `episoden-gluecksrad` → Cloud Firestore → **Regeln**. **Den gesamten** Inhalt der neuen Datei `firestore.rules` anstelle des bisherigen Regeleditor-Inhalts einfügen und **Veröffentlichen** klicken. Die Datei behält die bisherigen Regeln für `/rounds` bei und ergänzt ausschließlich das getrennte Datenmodell `/sharedRounds`.
 
-## Technische und Sicherheitsgrenzen
+**B. Dann GitHub aktualisieren:** Nur im Repository `Gamd25/episoden-gluecksrad` die Dateien im Ordner `web/` auf diese neue Version aktualisieren (bevorzugt GitHub Desktop oder Git; bei Browser-Upload auf korrekte Pfade und Ersetzen vorhandener Dateien achten). Der existierende `.github/workflows/pages.yml`-Workflow bleibt unverändert. Nach dem GitHub-Commit unter **Actions** den erfolgreichen Pages-Deploy prüfen.
 
-- **Spark statt Blaze:** Firebase Authentication, Cloud Firestore und Firebase Hosting im Rahmen der jeweils gültigen kostenlosen Kontingente; **keine Cloud Functions**. Die Anwendung benötigt Internet. Bei Quotenüberschreitung kann sie nicht weiterarbeiten.
-- **Vertrauensmodell:** Die Lehrperson ist die vertrauenswürdige Instanz für die Auslosung. Firestore verhindert konkurrierende Check-ins und legt Ergebnisse atomar offen, beweist aber **nicht**, dass eine manipulierte Lehrer-Webanwendung tatsächlich fair ausgelost hat. Diese Variante ist hinsichtlich manipulationssicherer zentraler Zufallsauslosung nicht gleichwertig mit einer unabhängig serverseitigen Auslosung.
-- Der persönliche Einladungslink ist ein **Bearer-Token**. Wer ihn vor der vorgesehenen Person benutzt, kann ihn beanspruchen; Moodle-Login-Verifikation (LTI/OIDC) ist nicht enthalten. Auch bei anonymen Firebase-Konten ist keine Identitätskontrolle garantiert.
-- Bei verlorener Browser-Sitzung nach dem Check-in muss die Lehrperson den Check-in ggf. aufheben und einen neuen Link ausgeben. Der alte Link wird dabei ungültig.
-- Öffne Einladungslinks in einem eigenen Tab, möglichst nicht in Moodle-iFrames. Falls du dich als Lehrperson auf demselben Gerät schon per Google angemeldet hast, nutze ein privates Browserfenster für einen Schüler-Test.
-- Firestore-Regeln erteilen nur der jeweiligen Lehrperson Verwaltungsrechte, nur eingecheckten Personen Zugriff auf die Check-in-Namensliste und nur authentifizierten Teilnehmern Zugriff auf ihr eigenes Ergebnis **nach** Veröffentlichung. Vorherige Episodenlisten und ungenutzte Links dürfen Schüler nicht abrufen.
-- **Datenschutz:** Die Anzeige der Namen gegenüber anderen eingecheckten Personen und die Nutzung von Google/Firebase muss vor dem Einsatz mit tatsächlichen Schülerdaten im Schulkontext freigegeben sein. Kein Versand kompletter Einladungs-CSV in einen Klassenkanal.
-- Ein `firebase deploy` überschreibt die Firestore-Regeln im **neuen** Projekt `episoden-gluecksrad`, niemals die Regeln im älteren `gefuehle-rad`-Projekt. Der Projektname wird bei der Bereitstellung ausdrücklich übergeben.
-- Keine von uns bestätigte Firebase-Veröffentlichung oder realer Sicherheits-/Mehrgeräte-Emulatortest. Details: `docs/PRUEFSTATUS.md`.
+**C. Mit erfundenen Namen testen:** https://gamd25.github.io/episoden-gluecksrad/ → Lehrerbereich → Test-Runde anlegen → Klassenlink kopieren → mit zwei privaten Browsern/Endgeräten jeweils einen erfundenen Namen eingeben → gleichzeitig denselben Namen versuchen → Lehrperson Teilnehmerliste prüfen → Check-in schließen → individuelle Ergebnisse und Gruppenliste kontrollieren. Die Regeln müssen auch im Rules Playground oder vorzugsweise Emulator gegen unerlaubte Reads/Writes geprüft werden.
 
-## Dateien
+### Aktualisierte Web-Dateien
 
-- `web/index.html`, `web/style.css`, `web/app.js`: Oberflächen und Lehrer-/Schüleransichten.
-- `web/config.js`: bereits eingetragene öffentliche Firebase-Webkonfiguration.
-- `web/spark-backend.js`: Firestore-Transaktionen, Check-in, Rotation, Freigabe, Löschung.
-- `web/draw-logic.js`: Web-Crypto-Mischung und möglichst gleichmäßige Verteilung.
-- `firestore.rules`: restriktive Schutzregeln für alle Daten.
-- `firebase.json`: ausschließlich Firestore-Regeln und Hosting, keine Functions.
-- `.github/workflows/pages.yml`: optionale Bereitstellung nur der Weboberfläche via GitHub Pages (separates Repository; neue Domain in Firebase Authentication freigeben).
-- `tests/draw.test.mjs`: Verteilungstests, `npm test`.
-- `JETZT-VEROEFFENTLICHEN.cmd`: Windows-Veröffentlichung.
+- `web/index.html` – Namenseingabe und gemeinsamer Klassenlink
+- `web/app.js` – neue Abläufe und Kopierfunktion
+- `web/shared-backend.js` – Transaktionen, Schließen, Auslosung, Entfernen, Löschen
+- `web/shared-logic.js` – Namens- und Episodenvalidierung
+- `web/style.css` – Felder und Layout
+- `firestore.rules` – ergänzte Zugriffsregeln für `/sharedRounds`
 
-## Tests
+**Nicht verändert:** Firebase-Webkonfiguration `web/config.js`, alte Daten in `/rounds`, vorhandener GitHub-Pages-Workflow und das Repository des ursprünglichen Gefühls-Rads. Die alte Datei `web/spark-backend.js` bleibt aus Gründen der Rückverfolgbarkeit im Archiv, wird aber von v3 nicht mehr eingebunden.
 
-```bash
-npm test
-npm run check
-python tools/verify.py
-```
+## Betrieb und Grenzen
 
-Die Tests sind lokale Syntax-, Verteilungs- und statische Konformitätsprüfungen. Ein Firestore-Emulator-Sicherheitsregellauf, echte Google-/Anonymous-Authentifizierung, Runden mit gleichzeitigen Klicks und Hosting-Veröffentlichung **müssen noch real geprüft werden**.
+- Spark: Keine Cloud Functions, keine Zahlungsinformationen für diese Architektur erforderlich, aber Firestore-/Auth-Kontingente sind beschränkt.
+- Browser der Lehrperson ist der Auslosungsoperator, keine unabhängig verifizierbare Server-Auslosung.
+- Maximal 30 Episoden, maximal 160 eingecheckte Personen zur Auslosung. Ein hartes serverseitiges Check-in-Kontingent oder umfassender Missbrauchs-/Rate-Schutz ist **nicht** umgesetzt. Bei mehr als 160 Einträgen verweigert die Anwendung die Auslosung.
+- Bereits begonnene alte persönliche-Link-Runden bleiben in `/rounds` gespeichert, werden aber im neuen Lehrerbereich (der `/sharedRounds` nutzt) nicht angezeigt. Keines dieser Dokumente wird durch das Update automatisch verändert oder gelöscht.
+- Bei Verlust der anonymen Firebase-Identität (Browserdaten löschen, anderes Gerät) ist die frühere Teilnahme nicht automatisch wiederherstellbar. Die Lehrperson kann den Eintrag vor der Auslosung entfernen, um eine erneute Registrierung zu erlauben.
+- Wenn die Verbindung während des zweiphasigen Abschlusses abbricht, erscheint die Runde gegebenenfalls als `closing` und die Lehrperson kann die Veröffentlichung erneut starten. Vor der Veröffentlichung erscheinen keine Episodenergebnisse.

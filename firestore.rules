@@ -103,5 +103,101 @@ service cloud.firestore {
         allow update, delete: if owner(rid);
       }
     }
+
+    // New, isolated shared-link rounds. Existing /rounds rules stay unchanged.
+    function sRound(rid) { return /databases/$(database)/documents/sharedRounds/$(rid); }
+    function sGate(rid) { return /databases/$(database)/documents/sharedRounds/$(rid)/gate/status; }
+    function sName(rid, key) { return /databases/$(database)/documents/sharedRounds/$(rid)/names/$(key); }
+    function sAuth(rid, uid) { return /databases/$(database)/documents/sharedRounds/$(rid)/authorized/$(uid); }
+    function sPresence(rid, uid) { return /databases/$(database)/documents/sharedRounds/$(rid)/presence/$(uid); }
+    function sOwner(rid) { return teacher() && get(sRound(rid)).data.ownerUid == request.auth.uid; }
+    function sOwnerAfter(rid) { return teacher() && getAfter(sRound(rid)).data.ownerUid == request.auth.uid; }
+    function sMember(rid) { return signed() && exists(sAuth(rid, request.auth.uid)); }
+    function sOpen(rid) { return get(sGate(rid)).data.state == 'checkin'; }
+
+    match /sharedRounds/{rid} {
+      allow get, list: if signed() && resource.data.ownerUid == request.auth.uid;
+      allow create: if teacher() && request.resource.data.ownerUid == request.auth.uid &&
+        request.resource.data.keys().hasOnly(['ownerUid','title','state','episodes','createdAt']) &&
+        request.resource.data.state == 'checkin' &&
+        request.resource.data.title is string &&
+        request.resource.data.title.size() >= 1 && request.resource.data.title.size() <= 100 &&
+        request.resource.data.episodes is list &&
+        request.resource.data.episodes.size() >= 1 && request.resource.data.episodes.size() <= 30;
+      allow update: if teacher() && resource.data.ownerUid == request.auth.uid &&
+        request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if teacher() && resource.data.ownerUid == request.auth.uid;
+
+      match /gate/{id} {
+        allow get: if signed() && id == 'status';
+        allow list: if false;
+        allow create: if id == 'status' && sOwnerAfter(rid);
+        allow update, delete: if sOwner(rid);
+      }
+      match /view/{id} {
+        allow get: if id == 'state' && (sOwner(rid) || sMember(rid));
+        allow list: if false;
+        allow create: if id == 'state' && sOwnerAfter(rid);
+        allow update, delete: if sOwner(rid);
+      }
+      match /names/{key} {
+        // A student's name is indexed under its canonical lowercase form.
+        // Only a CREATE is allowed, so the same canonical name cannot be reused.
+        allow get, list: if sOwner(rid);
+        allow create: if student() && sOpen(rid) &&
+          request.resource.data.keys().hasOnly(['name','nameKey','claimedUid','checkedInAt']) &&
+          request.resource.data.name is string &&
+          request.resource.data.name.size() >= 2 &&
+          request.resource.data.name.size() <= 60 &&
+          request.resource.data.name == request.resource.data.name.trim() &&
+          request.resource.data.name.matches('^[^/]{2,60}$') &&
+          request.resource.data.nameKey == key &&
+          key == request.resource.data.name.lower().trim().replace(' +', ' ') &&
+          request.resource.data.claimedUid == request.auth.uid &&
+          request.resource.data.checkedInAt == request.time &&
+          !exists(sAuth(rid, request.auth.uid)) &&
+          getAfter(sAuth(rid, request.auth.uid)).data.studentId == key &&
+          getAfter(sPresence(rid, request.auth.uid)).data.studentId == key;
+        allow update: if false;
+        allow delete: if sOwner(rid);
+      }
+      match /authorized/{uid} {
+        allow get: if signed() && (request.auth.uid == uid || sOwner(rid));
+        allow list: if sOwner(rid);
+        allow create: if student() && uid == request.auth.uid && sOpen(rid) &&
+          request.resource.data.keys().hasOnly(['studentId','name']) &&
+          request.resource.data.studentId is string &&
+          request.resource.data.name is string &&
+          getAfter(sName(rid, request.resource.data.studentId)).data.claimedUid == uid &&
+          getAfter(sName(rid, request.resource.data.studentId)).data.name == request.resource.data.name &&
+          getAfter(sPresence(rid, uid)).data.studentId == request.resource.data.studentId;
+        allow update: if false;
+        allow delete: if sOwner(rid);
+      }
+      match /presence/{uid} {
+        allow get, list: if sOwner(rid) || sMember(rid);
+        allow create: if student() && uid == request.auth.uid && sOpen(rid) &&
+          request.resource.data.keys().hasOnly(['studentId','name','authUid','checkedInAt']) &&
+          request.resource.data.studentId is string &&
+          request.resource.data.name is string &&
+          request.resource.data.authUid == uid &&
+          request.resource.data.checkedInAt == request.time &&
+          getAfter(sName(rid, request.resource.data.studentId)).data.claimedUid == uid &&
+          getAfter(sName(rid, request.resource.data.studentId)).data.name == request.resource.data.name &&
+          getAfter(sAuth(rid, uid)).data.studentId == request.resource.data.studentId;
+        allow update: if false;
+        allow delete: if sOwner(rid);
+      }
+      match /results/{uid} {
+        allow get: if sOwner(rid) || (
+          signed() && uid == request.auth.uid && sMember(rid) &&
+          get(sGate(rid)).data.state == 'published'
+        );
+        allow list: if sOwner(rid);
+        allow create: if sOwnerAfter(rid);
+        allow update, delete: if sOwner(rid);
+      }
+    }
+
   }
 }
