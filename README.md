@@ -46,5 +46,12 @@ Im Kopfbereich erscheint **v5**; fehlt es auf der Website, wurde das GitHub-Upda
 Die geänderten Frontend-Dateien erfordern **keine neuen Firestore-Regeln**. Siehe `docs/CHANGES-v5.md`.
 
 
-## v6 Update (09.11.2026)
-GitHub-Pages-Auslieferung mit `v6 · JS geladen` pruefen; direkter Loeschknopf je Runde in der Lehrer-Uebersicht. Details siehe START-HIER-GITHUB.md und docs/CHANGES-v6.md.
+## v7 Update (09.11.2026)
+GitHub-Pages-Auslieferung mit `v7 · JS geladen` pruefen; direkter Loeschknopf je Runde in der Lehrer-Uebersicht. Details siehe START-HIER-GITHUB.md und docs/CHANGES-v7.md.
+
+
+Version v7: Korrektur der Firestore-Löschung und Cache-Busting für die echte JS-Version. Siehe START-HIER-GITHUB.md.
+
+## Neu in v8
+
+Nach der Freigabe durch die Lehrperson startet jede eingecheckte Person ihr Glücksrad selbst mit „Rad drehen“ und kann das Drehen beliebig oft wiederholen. Die unveränderliche Firestore-Zuteilung bleibt bestehen; vor Freigabe gibt es keinen Dreh zur Episodenzuteilung.

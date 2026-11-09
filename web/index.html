@@ -6,12 +6,12 @@
   <meta name="theme-color" content="#152938">
   <meta name="description" content="Gemeinsamer Check-in und faire, synchronisierte Episodenzuteilung für Schulklassen.">
   <title>Episoden-Glücksrad</title>
-  <link rel="stylesheet" href="./style.css?v=6-20261109">
+  <link rel="stylesheet" href="./style.css?v=8-20261109">
 </head>
 <body>
   <header class="site-header">
     <div class="brand"><span class="brand-icon">✳</span><span>EPISODEN<span class="brand-light">·RAD</span></span></div>
-    <div class="header-right"><span id="buildBadge" class="build-version" title="Stand der tatsächlich geladenen JavaScript-Anwendung">Lädt v6 …</span><span id="connection" class="connection" aria-live="polite">Verbinde …</span><button id="teacherNav" class="btn text-button" type="button">Lehrerbereich</button></div>
+    <div class="header-right"><span id="buildBadge" class="build-version" title="Stand der tatsächlich geladenen JavaScript-Anwendung">Lädt v8 …</span><span id="connection" class="connection" aria-live="polite">Verbinde …</span><button id="teacherNav" class="btn text-button" type="button">Lehrerbereich</button></div>
   </header>
   <main class="main">
     <section id="landing" class="landing card">
@@ -44,6 +44,8 @@
           <div id="studentResult" class="hidden">
             <div class="wheel-area"><div class="wheel-pointer" aria-hidden="true"></div><canvas id="wheel" width="760" height="760" role="img" aria-label="Episoden-Glücksrad"></canvas></div>
             <div id="spinningLabel" class="spinning-label" aria-live="polite">Die Auslosung wurde freigegeben.</div>
+            <button id="spinWheelBtn" class="btn primary giant wheel-spin-button hidden" type="button" disabled>Rad drehen</button>
+            <p class="microcopy wheel-spin-hint">Du kannst nach der Freigabe wiederholt drehen. Die zugeteilte Episode ändert sich dadurch nicht.</p>
             <div id="myEpisode" class="result-box hidden" role="status" aria-live="polite"><span>DEINE ZUGETEILTE EPISODE</span><strong id="episodeName"></strong><small id="resultOwner"></small><p class="result-note">Diese Zuteilung bleibt gespeichert und erscheint beim erneuten Öffnen mit derselben Browser-Anmeldung wieder.</p></div>
           </div>
           <div id="studentError" class="alert error hidden" role="alert"></div>
@@ -119,6 +121,6 @@ Episode 5</textarea><small id="episodeInputCount" class="microcopy">5 Episoden</
     <div id="globalStatus" class="toast hidden" role="status" aria-live="polite"></div>
   </main>
   <footer class="footer">Episoden-Glücksrad · Getrennt vom ursprünglichen Gefühlskarten-Rad · Klassenlink nur an die vorgesehene Gruppe geben · Keine verifizierte Identität durch Namenseingabe</footer>
-  <script type="module" src="./app.js?v=6-20261109"></script>
+  <script type="module" src="./app.js?v=8-20261109"></script>
 </body>
 </html>

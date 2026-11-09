@@ -1,10 +1,11 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js';
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInAnonymously, signOut } from 'https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js';
 import { getFirestore, collection, doc, getDocFromServer, onSnapshot, query, where } from 'https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js';
-import { createRound as createSparkRound, checkIn as sparkCheckIn, changeEpisodes as sparkChangeEpisodes, revokeCheckIn as sparkRevoke, finalizeRound as sparkFinalize, deleteRound as sparkDelete } from './shared-backend.js';
+import { createRound as createSparkRound, checkIn as sparkCheckIn, changeEpisodes as sparkChangeEpisodes, revokeCheckIn as sparkRevoke, finalizeRound as sparkFinalize, deleteRound as sparkDelete } from './shared-backend.js?v=8-20261109';
 import { firebaseConfig } from './config.js';
 import { resolveStoredAssignment, visitedWheelKey } from './episode-result.js';
 import { createMembershipWitness } from './checkin-status.js';
+import { canSpinStoredWheel } from './wheel-spin-guard.js?v=8-20261109';
 
 const $ = id => document.getElementById(id);
 const hide = id => $(id).classList.add('hidden');
@@ -16,11 +17,11 @@ let app,auth,db;
 let mode = 'landing', user=null, currentRoundId=null, studentRoundId=null, studentIdentity=null;
 let teacherUnsubs=[], studentUnsubs=[], currentRound=null, currentResults=[], currentPresence=[], currentView=null;
 let teacherRounds=[], studentEpisode=null, spinning=false, currentRotation=0, activeAnimation=0, wheelEpisodes=[];
-let shownAssignment=null;
+let shownAssignment=null, spinTarget=null, wheelReleased=false;
 let studentWatchSerial=0; // Ungueltige alte Listener- und Serverantworten nicht auf aktuelle Anmeldungen anwenden.
 let toastTimer;
 const deletingRoundIds = new Set();
-const BUILD_VERSION = 'v6';
+const BUILD_VERSION = 'v8';
 const teacherProvider = new GoogleAuthProvider();
 teacherProvider.setCustomParameters({prompt:'select_account'});
 function toast(message,ms=5000){ const e=$('globalStatus');e.textContent=message;show('globalStatus');clearTimeout(toastTimer);toastTimer=setTimeout(()=>hide('globalStatus'),ms); }
@@ -85,6 +86,7 @@ function setup() {
   });
   $('printBtn').addEventListener('click',()=>window.print());
   $('joinBtn').addEventListener('click',safeRun('Check-in',checkIn));
+  $('spinWheelBtn').addEventListener('click',safeRun('Rad drehen',spinWheelAgain));
   updateInputCounts();
   const route=parseRoute();
   if(route.roundId){studentRoundId=route.roundId;setScreen('student');}else{setScreen('landing');}
@@ -106,7 +108,7 @@ function setup() {
   },e=>{console.error(e);$('connection').textContent='Verbindungsfehler';toast(message(e));});
 }
 function isGoogleUser(){return Boolean(user?.providerData?.some(p=>p.providerId==='google.com'));}
-function openTeacher(){++studentWatchSerial;clearListeners(studentUnsubs);studentIdentity=null;mode='teacherAuth';if(!configured()){setScreen('teacherAuth');return;}if(isGoogleUser()) startTeacherSession().catch(e=>toast(message(e)));else setScreen('teacherAuth');}
+function openTeacher(){++studentWatchSerial;clearListeners(studentUnsubs);studentIdentity=null;resetWheelSession();mode='teacherAuth';if(!configured()){setScreen('teacherAuth');return;}if(isGoogleUser()) startTeacherSession().catch(e=>toast(message(e)));else setScreen('teacherAuth');}
 
 async function startTeacherSession(){
   if(!isGoogleUser())return;
@@ -277,7 +279,7 @@ async function startStudentSession(){
     if(member.exists()){
       studentIdentity=member.data();watchStudent({alreadyVerified:true});
     } else {
-      studentIdentity=null;
+      studentIdentity=null;resetWheelSession();
       show('studentJoinArea');hide('studentWaiting');hide('studentResult');hide('waitingSidebar');
       $('joinBtn').disabled=false;
     }
@@ -298,7 +300,7 @@ function watchStudent({alreadyVerified=false}={}){
   clearListeners(studentUnsubs);
   if(!studentIdentity)return;
   // Alte Zeichnungen/Ergebnisse dürfen nicht in eine neue Sitzung hineinragen.
-  spinning=false;activeAnimation++;shownAssignment=null;studentEpisode=null;
+  resetWheelSession();
   hide('myEpisode');
   const watchId=++studentWatchSerial;
   const watchedUid=user.uid;
@@ -343,7 +345,7 @@ function watchStudent({alreadyVerified=false}={}){
         return;
       }
       ++studentWatchSerial;
-      clearListeners(studentUnsubs);studentIdentity=null;spinning=false;activeAnimation++;resultUnsub=null;shownAssignment=null;studentEpisode=null;hide('myEpisode');
+      clearListeners(studentUnsubs);studentIdentity=null;resetWheelSession();resultUnsub=null;hide('myEpisode');
       hide('studentWaiting');hide('studentResult');hide('waitingSidebar');show('studentJoinArea');$('joinBtn').disabled=false;
       $('studentHeading').textContent='Check-in nicht mehr aktiv';
       $('studentSub').textContent='Die Anmeldung ist nicht mehr in Firebase gespeichert.';
@@ -357,8 +359,8 @@ function watchStudent({alreadyVerified=false}={}){
     const data=snap.data();
     $('studentEyebrow').textContent=data.title||'Deine Gruppeneinteilung';
     wheelEpisodes=data.episodes||[];
-    if(data.state==='published'){hide('studentWaiting');hide('waitingSidebar');show('studentResult');$('studentHeading').textContent='Deine Auslosung';$('studentSub').textContent='Die Lehrperson hat den Check-in abgeschlossen.';subscribeResult();}
-    else {show('studentWaiting');show('waitingSidebar');hide('studentResult');$('studentHeading').textContent=data.state==='closing'?'Die Auslosung wird vorbereitet …':'Du bist dabei!';$('studentSub').textContent=data.state==='closing'?'Dein Check-in wurde übernommen. Die Auslosung wird vorbereitet.':'Dein Check-in wurde übernommen. Alle eingecheckten Personen warten gemeinsam auf die Freigabe.';}
+    if(data.state==='published'){wheelReleased=true;hide('studentWaiting');hide('waitingSidebar');show('studentResult');$('studentHeading').textContent='Deine Auslosung';$('studentSub').textContent='Die Lehrperson hat den Check-in abgeschlossen.';subscribeResult();}
+    else {wheelReleased=false;spinTarget=null;hide('spinWheelBtn');$('spinWheelBtn').disabled=true;show('studentWaiting');show('waitingSidebar');hide('studentResult');$('studentHeading').textContent=data.state==='closing'?'Die Auslosung wird vorbereitet …':'Du bist dabei!';$('studentSub').textContent=data.state==='closing'?'Dein Check-in wurde übernommen. Die Auslosung wird vorbereitet.':'Dein Check-in wurde übernommen. Alle eingecheckten Personen warten gemeinsam auf die Freigabe.';}
   },e=>setStudentError('Status: '+message(e))));
   studentUnsubs.push(onSnapshot(collection(roundRef,'presence'),snap=>{
     const people=snap.docs.map(d=>d.data()).sort((a,b)=>namesSorter.compare(a.name,b.name));
@@ -373,6 +375,7 @@ function subscribeResult(){
   resultUnsub=onSnapshot(doc(db,'sharedRounds',subscribedRound,'results',subscribedUid),snap=>{
     if(subscribedRound!==studentRoundId || subscribedUid!==user?.uid || !studentIdentity)return;
     if(!snap.exists()){
+      spinTarget=null;hide('spinWheelBtn');$('spinWheelBtn').disabled=true;
       $('spinningLabel').textContent='Deine freigegebene Episode wird geladen …';
       return;
     }
@@ -381,6 +384,8 @@ function subscribeResult(){
     catch(e){setStudentError(message(e));return;}
     const assignmentKey=`${subscribedRound}:${subscribedUid}:${assignment.episodeId}`;
     studentEpisode=snap.data();
+    // Nur die geprüfte, veröffentlichte Firestore-Zuordnung ist ein Radziel.
+    spinTarget={roundId:subscribedRound,uid:subscribedUid,index:assignment.index,episodeId:assignment.episodeId};
     show('studentResult');
     // Wichtig: Die dauerhafte Textanzeige hängt ausschließlich an dem aus
     // Firestore geladenen Ergebnis, NICHT am Animationsende oder an localStorage.
@@ -390,9 +395,26 @@ function subscribeResult(){
     if(shownAssignment===assignmentKey)return;
     shownAssignment=assignmentKey;
     renderWheel(wheelEpisodes,currentRotation);
-    if(!spinning)startWheel(assignment.index,studentEpisode);
+    $('spinningLabel').textContent='Deine Episode steht fest. Drücke „Rad drehen“ für die Animation.';
+    $('spinWheelBtn').textContent='Rad drehen';
+    $('spinWheelBtn').disabled=false;
+    show('spinWheelBtn');
   },e=>setStudentError('Zuteilung: '+message(e)));
   studentUnsubs.push(()=>{resultUnsub?.();resultUnsub=null;});
+}
+function resetWheelSession(){
+  spinning=false;activeAnimation++;shownAssignment=null;studentEpisode=null;
+  spinTarget=null;wheelReleased=false;
+  $('spinWheelBtn').disabled=true;
+  $('spinWheelBtn').textContent='Rad drehen';
+  hide('spinWheelBtn');
+}
+function spinWheelAgain(){
+  if(!canSpinStoredWheel({published:wheelReleased,target:spinTarget,uid:user?.uid,roundId:studentRoundId,spinning,episodes:wheelEpisodes})){
+    throw new Error('Das Rad ist erst nach der Freigabe und einer bestätigten Episodenzuteilung verfügbar.');
+  }
+  // Keine neue Zufallsziehung und kein Firestore-Schreibzugriff: reine Animation.
+  startWheel(spinTarget.index);
 }
 function renderWheel(episodes,rotation){
   const canvas=$('wheel'),ctx=canvas.getContext('2d');
@@ -417,17 +439,25 @@ function renderWheel(episodes,rotation){
   ctx.beginPath();ctx.arc(center,center,r*.14,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.lineWidth=5;ctx.strokeStyle='#d1dbd8';ctx.stroke();
   ctx.fillStyle='#1b6670';ctx.font='bold 55px system-ui';ctx.textBaseline='middle';ctx.textAlign='center';ctx.fillText('✳',center,center+2);
 }
-function startWheel(index,result){
-  spinning=true;const key=visitedWheelKey(studentRoundId,user.uid);
+function startWheel(index){
+  spinning=true;
+  const button=$('spinWheelBtn');button.disabled=true;button.textContent='Rad dreht …';
+  const key=visitedWheelKey(studentRoundId,user.uid);
   const arc=2*Math.PI/wheelEpisodes.length;
   const desired=-(index+.5)*arc;
   const diff=(desired-(currentRotation%(2*Math.PI))+Math.PI*6)%(2*Math.PI);
   const start=currentRotation, target=start+Math.PI*2*5+diff;
-  let already=false;try { already=localStorage.getItem(key)==='1'; } catch { /* Browser blockiert Speicherung */ }
-  const duration=window.matchMedia('(prefers-reduced-motion: reduce)').matches||already?0:3200;
-  $('spinningLabel').textContent=duration?'Das Glücksrad dreht …':'Auslosung abgeschlossen';
-  // Ergebnisbox bleibt auch WÄHREND der Animation sichtbar.
-  function finish(){currentRotation=target;renderWheel(wheelEpisodes,currentRotation);$('spinningLabel').textContent='Deine Episode wurde verbindlich zugeteilt.';try { localStorage.setItem(key,'1'); } catch { /* Browser blockiert Speicherung */ } spinning=false;}
+  // Auf ausdrücklichen Klick darf die Animation jedes Mal laufen.
+  const duration=window.matchMedia('(prefers-reduced-motion: reduce)').matches?0:3200;
+  $('spinningLabel').textContent=duration?'Das Glücksrad dreht …':'Die zugeteilte Episode bleibt gleich.';
+  // Die Ergebnisbox bleibt während des Drehens sichtbar und unverändert.
+  function finish(){
+    currentRotation=target;renderWheel(wheelEpisodes,currentRotation);
+    $('spinningLabel').textContent='Das Rad zeigt wieder deine gespeicherte Episode.';
+    try { localStorage.setItem(key,'1'); } catch { /* Browser blockiert Speicherung */ }
+    spinning=false;button.textContent='Noch einmal drehen';
+    button.disabled=!canSpinStoredWheel({published:wheelReleased,target:spinTarget,uid:user?.uid,roundId:studentRoundId,spinning,episodes:wheelEpisodes});
+  }
   if(!duration){finish();return;}
   const started=performance.now(),animationId=++activeAnimation;
   function frame(now){if(animationId!==activeAnimation)return;const p=Math.min((now-started)/duration,1),easing=1-Math.pow(1-p,4);currentRotation=start+(target-start)*easing;renderWheel(wheelEpisodes,currentRotation);if(p<1)requestAnimationFrame(frame);else finish();}

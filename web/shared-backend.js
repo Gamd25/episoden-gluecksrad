@@ -1,7 +1,7 @@
 // GitHub Pages + Cloud Firestore Spark. No Cloud Functions.
 // A shared link is an invitation, NOT proof that the typed name belongs to its user.
 import {
-  collection, doc, getDoc, getDocs, getDocsFromServer, query, where, runTransaction,
+  collection, doc, getDoc, getDocFromServer, getDocs, getDocsFromServer, query, where, runTransaction,
   writeBatch, serverTimestamp, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js';
 import { balancedDraw } from './draw-logic.js';
@@ -115,15 +115,23 @@ export async function deleteRound(db,uid,rid){
     tx.update(roundRef,{state:'deleting'});
     if(gate.exists())tx.update(gateRef,{state:'deleting'});
   });
-  // Delete children first and the parent last. Not atomic; retry if interrupted.
-  for(const name of ['results','presence','authorized','names','view','gate']){
-    // Bei Löschungen keine eventuell veralteten Offline-Cache-Ergebnisse verwenden.
+  // Alle auflistbaren Teilnehmer-Unterkollektionen serverseitig lesen.
+  // view und gate dürfen laut Firestore-Regeln NICHT gelistet werden
+  // (allow list: if false), die zwei festen Dokumente jedoch einzeln lesen.
+  // Die Elternrunde bleibt bis zum Schluss bestehen: Owner-Prüfungen der
+  // Unterdokumente benötigen sie weiterhin. Teil-Löschung ist wiederholbar.
+  for(const name of ['results','presence','authorized','names']){
     const snap=await getDocsFromServer(collection(db,'sharedRounds',rid,name));
     for(let i=0;i<snap.docs.length;i+=100){
       const batch=writeBatch(db);
       snap.docs.slice(i,i+100).forEach(d=>batch.delete(d.ref));
       await batch.commit();
     }
+  }
+  for(const [name,id] of [['view','state'],['gate','status']]){
+    const ref=part(db,rid,name,id);
+    const snap=await getDocFromServer(ref);
+    if(snap.exists())await deleteDoc(ref);
   }
   await deleteDoc(root(db,rid));
 }

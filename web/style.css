@@ -28,3 +28,9 @@
 .round-delete{cursor:pointer;align-self:stretch;background:#fff5f3;border:1px solid #d6a49b;border-radius:9px;color:#8b352d;font-size:.77rem;font-weight:700;padding:9px 8px;min-width:65px}
 .round-delete:hover,.round-delete:focus-visible{background:#fce6e1;border-color:#bb6655}
 .round-delete:disabled{opacity:.55;cursor:wait}
+
+/* v8: ausdrueckliches Wiederholen der Animation nach verifizierter Freigabe. */
+.wheel-spin-button{margin:7px auto 12px;min-width:min(270px,100%);display:flex}
+.wheel-spin-button.hidden{display:none}
+.wheel-spin-button:disabled{opacity:.65;cursor:wait}
+.wheel-spin-hint{max-width:440px;margin:0 auto 12px;line-height:1.5}

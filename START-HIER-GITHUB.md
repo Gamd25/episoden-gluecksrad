@@ -1,10 +1,10 @@
-# v6 – Schnellupdate ohne Node.js und ohne Blaze
+# Episoden-Glücksrad v8 – GitHub Pages und Firebase Spark
 
-1. Entpacke `EpisodenGluecksrad_GitHub_Update_v6_2026-11-09.zip`.
-2. Im Repository `Gamd25/episoden-gluecksrad` **genau die enthaltenen vier Dateien** im Ordner `web/` aktualisieren: `app.js`, `index.html`, `style.css`, `shared-backend.js`. Die anderen Dateien, das alte `gefuehle-rad` und die Firestore-Regeln bleiben unverändert.
-3. GitHub → **Actions**: neuer grüner erfolgreicher Deploy **nach** dem Commit.
-4. Diese Adresse im Privatfenster öffnen: https://gamd25.github.io/episoden-gluecksrad/?release=v6-20261109
-5. OBEN muss **v6 · JS geladen** stehen. Fehlt dieser Schriftzug, wird keine v6-Datei ausgeführt und die vorherige Fehleranzeige kann aus altem Code stammen.
-6. Eine Testperson einchecken. In **Meine Auslosungen** den neuen Löschknopf **nur an einer eigens erzeugten Testrunde** ausprobieren. Exakt `LÖSCHEN` eingeben.
+1. Das **kleine GitHub-Update v8** entpacken.
+2. Im bestehenden Repository `Gamd25/episoden-gluecksrad` im Ordner `web/` die Dateien `app.js`, `index.html`, `style.css` aktualisieren und `wheel-spin-guard.js` ergänzen. Das Repository `gefuehle-rad` nicht ändern.
+3. Änderungen committen und unter GitHub → Actions einen neuen erfolgreichen Pages-Deploy prüfen.
+4. `https://gamd25.github.io/episoden-gluecksrad/?release=v8-20261109` neu öffnen. Oben muss `v8 · JS geladen` stehen.
+5. Mit erfundenen Namen einen Check-in durchführen. **Vor** Abschluss durch die Lehrperson darf kein Episodenrad erscheinen.
+6. Nach Abschluss und Freigabe muss der Knopf „Rad drehen“ erscheinen. Mehrfach drehen; immer dieselbe gespeicherte Episode anzeigen.
 
-Hinweise: Keine Firebase-Regeländerung für diese Version. Die Oberfläche ist nicht live geprüft, sondern offline getestet. Vor Verwendung echter Namen Datenschutz/Identitätsprüfung berücksichtigen.
+Weder Firebase-Regeln noch Node.js noch Blaze werden für dieses GitHub-Update benötigt. Die Tests sind lokal erfolgreich, die tatsächliche Bereitstellung und Mehrgeräte-Funktion sind noch nicht abgenommen.
