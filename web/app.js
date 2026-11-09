@@ -24,7 +24,7 @@ const originalWheelAudio=createOriginalWheelAudio();
 let studentWatchSerial=0; // Ungueltige alte Listener- und Serverantworten nicht auf aktuelle Anmeldungen anwenden.
 let toastTimer;
 const deletingRoundIds = new Set();
-const BUILD_VERSION = 'v9';
+const BUILD_VERSION = 'v10';
 const teacherProvider = new GoogleAuthProvider();
 teacherProvider.setCustomParameters({prompt:'select_account'});
 function toast(message,ms=5000){ const e=$('globalStatus');e.textContent=message;show('globalStatus');clearTimeout(toastTimer);toastTimer=setTimeout(()=>hide('globalStatus'),ms); }
@@ -235,8 +235,8 @@ async function deleteRoundById(roundId,title){
     throw new Error('Runde nicht gefunden oder kein berechtigter Lehrerzugang. Bitte die Liste neu laden.');
   }
   if(deletingRoundIds.has(roundId))return;
-  const typed=prompt(`Runde „${title}“ samt Check-ins und Episodenergebnissen endgültig löschen?\n\nGib exakt LÖSCHEN ein:`);
-  if(typed!=='LÖSCHEN')return;
+  const approved=confirm(`Runde „${title}“ samt Check-ins und Episodenergebnissen endgültig löschen?\n\nDiese Aktion kann nicht rückgängig gemacht werden.`);
+  if(!approved)return;
   deletingRoundIds.add(roundId);renderRoundList();
   try{
     await call('deleteRound',{roundId});
@@ -382,6 +382,7 @@ function subscribeResult(){
     if(!snap.exists()){
       spinTarget=null;hide('spinWheelBtn');$('spinWheelBtn').disabled=true;
       $('spinningLabel').textContent='Deine freigegebene Episode wird geladen …';
+      show('spinningLabel');
       return;
     }
     let assignment;
@@ -400,7 +401,8 @@ function subscribeResult(){
     if(shownAssignment===assignmentKey)return;
     shownAssignment=assignmentKey;
     renderWheel(wheelEpisodes,currentRotation);
-    $('spinningLabel').textContent='Deine Episode steht fest. Drücke „Rad drehen“ für die Animation.';
+    $('spinningLabel').textContent='';
+    hide('spinningLabel');
     $('spinWheelBtn').textContent='Rad drehen';
     $('spinWheelBtn').disabled=false;
     show('spinWheelBtn');
@@ -414,6 +416,8 @@ function resetWheelSession(){
   $('spinWheelBtn').disabled=true;
   $('spinWheelBtn').textContent='Rad drehen';
   hide('spinWheelBtn');
+  $('spinningLabel').textContent='';
+  hide('spinningLabel');
 }
 function spinWheelAgain(){
   if(!canSpinStoredWheel({published:wheelReleased,target:spinTarget,uid:user?.uid,roundId:studentRoundId,spinning,episodes:wheelEpisodes})){
@@ -458,7 +462,8 @@ function startWheel(index){
   const {start,target}=planStoredLanding({index,episodeCount:wheelEpisodes.length,currentRotation,turns});
   // Barrierefreiheit: reduzierte Bewegung hat Vorrang vor der Originaldauer.
   const duration=window.matchMedia('(prefers-reduced-motion: reduce)').matches?0:ORIGINAL_WHEEL_SETTINGS.durationMs;
-  $('spinningLabel').textContent=duration?'Das Glücksrad dreht …':'Die zugeteilte Episode bleibt gleich.';
+  $('spinningLabel').textContent=duration?'Das Glücksrad dreht …':'';
+  if(duration)show('spinningLabel');else hide('spinningLabel');
   // Die Ergebnisbox bleibt während des Drehens sichtbar und unverändert.
   if(duration)originalWheelAudio.startRattle();
   let finished=false;
@@ -467,7 +472,8 @@ function startWheel(index){
     finished=true;
     originalWheelAudio.finish(duration>0);
     currentRotation=target;renderWheel(wheelEpisodes,currentRotation);
-    $('spinningLabel').textContent='Das Rad zeigt wieder deine gespeicherte Episode.';
+    $('spinningLabel').textContent='';
+    hide('spinningLabel');
     try { localStorage.setItem(key,'1'); } catch { /* Browser blockiert Speicherung */ }
     spinning=false;button.textContent='Noch einmal drehen';
     button.disabled=!canSpinStoredWheel({published:wheelReleased,target:spinTarget,uid:user?.uid,roundId:studentRoundId,spinning,episodes:wheelEpisodes});
