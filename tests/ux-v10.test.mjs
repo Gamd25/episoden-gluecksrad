@@ -30,7 +30,7 @@ test('no change to Firestore protection or re-randomization while spinning',()=>
   assert.match(before,/4300/);
 });
 test('fresh deploy has unmistakable version marker',()=>{
-  assert.match(app,/BUILD_VERSION = 'v10'/);
-  assert.match(html,/Lädt v10/);
-  assert.match(html,/app\.js\?v=10-20261109/);
+  assert.match(app,/BUILD_VERSION = 'v11'/);
+  assert.match(html,/Lädt v11/);
+  assert.match(html,/app\.js\?v=11-20261109/);
 });

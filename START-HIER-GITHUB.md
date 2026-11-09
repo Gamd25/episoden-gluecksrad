@@ -7,3 +7,11 @@
 5. Vor der Auslosung darf niemand drehen. Danach testweise drehen und noch einmal drehen: das Rad soll 4,3 Sekunden lang 6–10 Umdrehungen vollführen, zur *bereits gespeicherten* Episode stoppen und dabei nur die Originalgeräusche verwenden. Die Ergebnisse dürfen sich nicht ändern.
 
 **Nicht notwendig:** neue Firebase-Regeln, Node.js, Blaze-Tarif oder eine weitere Auslosung. Das bisherige `Gamd25/gefuehle-rad` bleibt unverändert. Vor dem Unterricht mit echten Namen ist ein Mehrgeräte-/Berechtigungstest erforderlich.
+
+## GitHub-Update v10
+
+Nur `web/app.js` und `web/index.html` aus dem Update-ZIP in den gleichnamigen Pfaden des bestehenden Repositories ersetzen. Auf GitHub Actions den Erfolg prüfen und die Website mit `?release=v10-20261109` neu laden. Die Kennung `v10 · JS geladen` muss erscheinen. Firestore-Regeln müssen nicht erneut veröffentlicht werden.
+
+## GitHub-Update v11
+
+Für das v11-Update die Dateien `web/app.js` und `web/index.html` aus dem separaten Update-ZIP an denselben Pfaden im Repository `Gamd25/episoden-gluecksrad` ersetzen. Erfolgreiche Veröffentlichung unter GitHub Actions abwarten, Seite neu laden und auf „v11 · JS geladen“ prüfen. Keine Firestore-Regeländerungen erforderlich.

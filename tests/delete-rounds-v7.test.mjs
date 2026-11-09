@@ -34,9 +34,9 @@ test('Nach dem Löschen keine pauschalen Änderungen an anderen Runden',()=>{
 });
 test('Gute Versionsdiagnose im HTML und tatsächlich geladenem JS',()=>{
  assert.match(html,/id="buildBadge"/);
- assert.match(app,/BUILD_VERSION = 'v10'/);
+ assert.match(app,/BUILD_VERSION = 'v11'/);
  assert.match(app,/buildBadge\.textContent=BUILD_VERSION/);
- assert.match(html,/app\.js\?v=10-20261109/);
+ assert.match(html,/app\.js\?v=11-20261109/);
 });
 test('Alte fehlerhafte Check-in-Meldung kann v7-Code nicht erzeugen',()=>{
  assert.doesNotMatch(app,/Dein Check-in wurde von der Lehrperson entfernt/);
@@ -49,5 +49,5 @@ test('Löschen bleibt ohne Firestore-Regeländerung und neu geladenem Backend m�
  assert.match(rules,/match \/gate\/\{id\}/);
  assert.match(rules,/allow list: if false/);
  assert.match(app,/shared-backend\.js\?v=8-20261109/);
- assert.match(html,/v10 · JS geladen|Lädt v10/);
+ assert.match(html,/v11 · JS geladen|Lädt v11/);
 });

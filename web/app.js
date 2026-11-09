@@ -24,7 +24,7 @@ const originalWheelAudio=createOriginalWheelAudio();
 let studentWatchSerial=0; // Ungueltige alte Listener- und Serverantworten nicht auf aktuelle Anmeldungen anwenden.
 let toastTimer;
 const deletingRoundIds = new Set();
-const BUILD_VERSION = 'v10';
+const BUILD_VERSION = 'v11';
 const teacherProvider = new GoogleAuthProvider();
 teacherProvider.setCustomParameters({prompt:'select_account'});
 function toast(message,ms=5000){ const e=$('globalStatus');e.textContent=message;show('globalStatus');clearTimeout(toastTimer);toastTimer=setTimeout(()=>hide('globalStatus'),ms); }

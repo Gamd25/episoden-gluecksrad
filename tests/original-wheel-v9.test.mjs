@@ -37,8 +37,8 @@ test('no draw is called on wheel spin and original wheel code is versioned',()=>
   const spin=app.slice(app.indexOf('function startWheel(index){'),app.lastIndexOf('setup();'));
   assert.match(spin,/planStoredLanding\(/);assert.match(spin,/chooseVisualTurns\(/);assert.match(spin,/easeOutCubic\(p\)/);
   assert.doesNotMatch(spin,/sparkFinalize|balancedDraw|runTransaction|setDoc\(/);
-  assert.match(html,/app\.js\?v=10-20261109/);
-  assert.match(app,/BUILD_VERSION = 'v10'/);
+  assert.match(html,/app\.js\?v=11-20261109/);
+  assert.match(app,/BUILD_VERSION = 'v11'/);
   assert.match(rules,/match \/sharedRounds\/\{rid\}/);
 });
 

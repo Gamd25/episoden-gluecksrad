@@ -48,8 +48,8 @@ test('no premature spin control; clear state after new session',()=>{
   assert.match(app,/if\(data.state==='published'\)\{wheelReleased=true/);
   assert.match(app,/else \{wheelReleased=false;spinTarget=null/);
   assert.match(html,/id="studentResult" class="hidden"/);
-  assert.match(html,/v=10-20261109/);
-  assert.match(app,/BUILD_VERSION = 'v10'/);
+  assert.match(html,/v=11-20261109/);
+  assert.match(app,/BUILD_VERSION = 'v11'/);
 });
 test('firestore authorization rules are unchanged',()=>{
   assert.match(rules,/match \/sharedRounds\/\{rid\}/);

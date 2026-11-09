@@ -1,7 +1,5 @@
 # Episoden-Glücksrad – Spark v9: gemeinsamer Check-in-Link, dauerhaftes Ergebnis und Original-Radverhalten
 
-https://gamd25.github.io/episoden-gluecksrad/
-
 **Stand: 09.11.2026.** Für das **neue** Repository `Gamd25/episoden-gluecksrad` und das **separate** Firebase-Projekt `episoden-gluecksrad`. Das ursprüngliche `Gamd25/gefuehle-rad` wird weder verändert noch überschrieben.
 
 ## Neues Verhalten
@@ -59,3 +57,7 @@ Nach der Freigabe durch die Lehrperson startet jede eingecheckte Person ihr Glü
 ## v9: Originaldrehung und Ton
 
 Das Schüler-Rad dreht 4,3 Sekunden, mit 6–10 zufälligen *visuellen* Umdrehungen und kubischem Abbremsen. Ziel bleibt die zuvor freigegebene Episode. Währenddessen wird die Holzratsche wiederholt abgespielt, beim Stopp einmal der Ding-Klang (jeweils Lautstärke 0,85). Original-WAV-Dateien bitte vorzugsweise aus `Gamd25/gefuehle-rad/assets/` nach `web/assets/` kopieren; andernfalls verweist die Anwendung auf die entsprechenden GitHub-Pages-Dateien des Gefühls-Rads. Die Original-WAV-Dateien sind nicht Bestandteil dieses ZIP.
+
+## v10
+
+Die Schüleransicht blendet nach erfolgter bzw. wiederholter Drehung keine zusätzlichen Erklärsätze zum bereits feststehenden Ergebnis ein. Im Lehrerbereich wird eine Runde per Ja/Nein-Abfrage ohne Kennwort bzw. Texteingabe gelöscht. Das Google-Eigentümerrecht bleibt erforderlich. Siehe `docs/CHANGES-v10.md`.
