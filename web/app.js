@@ -1,7 +1,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js';
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInAnonymously, signOut } from 'https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js';
 import { getFirestore, collection, doc, getDoc, onSnapshot, query, where } from 'https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js';
-import { createRound as createSparkRound, checkIn as sparkCheckIn, changeEpisodes as sparkChangeEpisodes, rotateInvite as sparkRotateInvite, finalizeRound as sparkFinalize, deleteRound as sparkDelete } from './spark-backend.js';
+import { createRound as createSparkRound, checkIn as sparkCheckIn, changeEpisodes as sparkChangeEpisodes, revokeCheckIn as sparkRevoke, finalizeRound as sparkFinalize, deleteRound as sparkDelete } from './shared-backend.js';
 import { firebaseConfig } from './config.js';
 
 const $ = id => document.getElementById(id);
@@ -11,9 +11,9 @@ const colors = ['#268c94','#e9ae52','#7daed0','#ce746a','#7e9e7e','#927eb5','#d3
 const rowSplit = raw => raw.split(/\r?\n/u).map(s=>s.trim()).filter(Boolean);
 const namesSorter = new Intl.Collator('de',{sensitivity:'base'});
 let app,auth,db;
-let mode = 'landing', user=null, currentRoundId=null, studentRoundId=null, joinToken=null, studentIdentity=null;
-let teacherUnsubs=[], studentUnsubs=[], currentRound=null, currentRoster=[], currentResults=[], currentPresence=[], currentView=null;
-let teacherRounds=[], freshLinks=[], studentEpisode=null, spinning=false, currentRotation=0, activeAnimation=0, wheelEpisodes=[];
+let mode = 'landing', user=null, currentRoundId=null, studentRoundId=null, studentIdentity=null;
+let teacherUnsubs=[], studentUnsubs=[], currentRound=null, currentResults=[], currentPresence=[], currentView=null;
+let teacherRounds=[], studentEpisode=null, spinning=false, currentRotation=0, activeAnimation=0, wheelEpisodes=[];
 let toastTimer;
 const teacherProvider = new GoogleAuthProvider();
 teacherProvider.setCustomParameters({prompt:'select_account'});
@@ -24,9 +24,9 @@ function setBusy(button,busy,label) { button.disabled=busy; if(busy) {button.dat
 function setScreen(next) { mode=next; ['landing','studentApp','teacherAuth','teacherApp'].forEach(id=>hide(id));show(next==='landing'?'landing':next==='student'?'studentApp':next==='teacher'?'teacherApp':'teacherAuth'); }
 function clearListeners(list){ list.splice(0).forEach(unsub=>{try{unsub();}catch{}}); }
 function linkBase(){return `${location.origin}${location.pathname}`;}
-function studentUrl(roundId,token){return `${linkBase()}#r=${encodeURIComponent(roundId)}&code=${encodeURIComponent(token)}`;}
+function studentUrl(roundId){return `${linkBase()}#r=${encodeURIComponent(roundId)}`;}
 function downloadCSV(filename,rows){
- const csv='\ufeff'+rows.map(row=>row.map(value=>'"'+String(value??'').replace(/"/gu,'""')+'"').join(';')).join('\r\n')+'\r\n';
+ const csv='\ufeff'+rows.map(row=>row.map(value=>{const item=String(value??''); const escaped=/^[=+\-@\t\r]/u.test(item)?"'"+item:item; return '"'+escaped.replace(/"/gu,'""')+'"';}).join(';')).join('\r\n')+'\r\n';
  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob);
  const a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
@@ -35,18 +35,17 @@ function call(name,data){
   const id=data?.roundId;
   switch(name){
     case 'createRound': return createSparkRound(db,user.uid,data);
-    case 'checkIn': return sparkCheckIn(db,user.uid,id,data.token);
+    case 'checkIn': return sparkCheckIn(db,user.uid,id,data.name);
     case 'changeEpisodes': return sparkChangeEpisodes(db,user.uid,id,data.episodes);
     case 'finalizeRound': return sparkFinalize(db,user.uid,id);
-    case 'rotateInvite': return sparkRotateInvite(db,user.uid,id,data.studentId,false);
-    case 'revokeCheckIn': return sparkRotateInvite(db,user.uid,id,data.studentId,true);
+    case 'revokeCheckIn': return sparkRevoke(db,user.uid,id,data.studentId,data.authUid);
     case 'deleteRound': return sparkDelete(db,user.uid,id);
     default: throw new Error('Unbekannte Aktion.');
   }
 }
 function configured(){return Boolean(firebaseConfig?.apiKey && !String(firebaseConfig.apiKey).startsWith('HIER_') && firebaseConfig.projectId && !String(firebaseConfig.projectId).startsWith('HIER_'));}
-function updateInputCounts(){$('studentInputCount').textContent=`${rowSplit($('studentsInput').value).length} Namen`;$('episodeInputCount').textContent=`${rowSplit($('episodesInput').value).length} Episoden`;}
-function parseRoute(){const args=new URLSearchParams(location.hash.replace(/^#/u,''));return {roundId:args.get('r'),token:args.get('code')};}
+function updateInputCounts(){$('episodeInputCount').textContent=`${rowSplit($('episodesInput').value).length} Episoden`;}
+function parseRoute(){const args=new URLSearchParams(location.hash.replace(/^#/u,''));return {roundId:args.get('r')};}
 function makeElement(tag,className,text){const e=document.createElement(tag);if(className)e.className=className;if(text!==undefined)e.textContent=String(text);return e;}
 function makeButton(label,fn){const b=makeElement('button','btn-mini',label);b.type='button';b.addEventListener('click',safeRun(label,fn));return b;}
 
@@ -61,13 +60,15 @@ function setup() {
   $('deleteRoundBtn').addEventListener('click',safeRun('Runde löschen',deleteRound));
   $('logoutBtn').addEventListener('click',safeRun('Abmeldung',async()=>{clearListeners(teacherUnsubs);await signOut(auth);user=null;setScreen('teacherAuth');}));
   $('createForm').addEventListener('submit',event=>{event.preventDefault();createRound().catch(e=>{console.error(e);toast(message(e),8000);});});
-  $('studentsInput').addEventListener('input',updateInputCounts);$('episodesInput').addEventListener('input',updateInputCounts);
+  $('episodesInput').addEventListener('input',updateInputCounts);
   $('saveEpisodes').addEventListener('click',safeRun('Episoden speichern',saveEpisodes));
   $('finalizeBtn').addEventListener('click',safeRun('Auslosung',finalizeRound));
-  $('downloadLinks').addEventListener('click',()=>{
-    if(!freshLinks.length){toast('Bitte neue Links erzeugen oder die beim Erstellen gespeicherte CSV verwenden.');return;}
-    downloadCSV('episoden-zugangslinks.csv',[['Name','Persönlicher Zugangslink'],...freshLinks.map(item=>[item.name,studentUrl(currentRoundId,item.token)])]);
-  });
+  $('copySharedLink').addEventListener('click',safeRun('Klassenlink kopieren',async()=>{
+    const link=$('sharedLink').value;
+    if(!link)throw new Error('Keine Runde ausgewählt.');
+    try{await navigator.clipboard.writeText(link);toast('Gemeinsamer Klassenlink kopiert.');}
+    catch { $('sharedLink').focus(); $('sharedLink').select(); toast('Bitte den markierten Link mit Strg+C kopieren.'); }
+  }));
   $('exportResults').addEventListener('click',()=>{
     if(!currentResults.length){toast('Noch keine veröffentlichten Ergebnisse.');return;}
     const byId=new Map(currentRound.episodes.map(e=>[e.id,e.label]));
@@ -78,7 +79,7 @@ function setup() {
   $('joinBtn').addEventListener('click',safeRun('Check-in',checkIn));
   updateInputCounts();
   const route=parseRoute();
-  if(route.roundId){studentRoundId=route.roundId;joinToken=route.token;setScreen('student');}else{setScreen('landing');}
+  if(route.roundId){studentRoundId=route.roundId;setScreen('student');}else{setScreen('landing');}
   if(!configured()){
     $('connection').textContent='Einrichtung fehlt';
     $('loginBtn').disabled=true;$('joinBtn').disabled=true;
@@ -103,7 +104,7 @@ async function startTeacherSession(){
   if(!isGoogleUser())return;
   setScreen('teacher');
   clearListeners(teacherUnsubs);
-  teacherUnsubs.push(onSnapshot(query(collection(db,'rounds'),where('ownerUid','==',user.uid)),snap=>{
+  teacherUnsubs.push(onSnapshot(query(collection(db,'sharedRounds'),where('ownerUid','==',user.uid)),snap=>{
     teacherRounds=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.toMillis?.()??0)-(a.createdAt?.toMillis?.()??0));
     renderRoundList();
     if(currentRoundId){const item=teacherRounds.find(r=>r.id===currentRoundId);if(item){currentRound=item;renderDetail();}}
@@ -112,7 +113,7 @@ async function startTeacherSession(){
 }
 function renderRoundList(){
   const list=$('roundList');list.replaceChildren();$('roundTotal').textContent=teacherRounds.length;
-  if(!teacherRounds.length){list.append(makeElement('p','microcopy','Noch keine Runden vorhanden.'));return;}
+  if(!teacherRounds.length){list.append(makeElement('p','microcopy','Noch keine gemeinsamen Klassenrunden vorhanden.'));return;}
   for(const round of teacherRounds){
     const b=makeElement('button','round-item'+(round.id===currentRoundId?' active':''));b.type='button';
     b.append(makeElement('strong','',round.title),makeElement('small','',round.state==='published'?'Ausgelost':'Check-in offen'));
@@ -123,32 +124,27 @@ async function createRound(){
   const button=$('createBtn');setBusy(button,true,'Erstelle Runde …');
   try{
     if(!isGoogleUser())throw new Error('Nur die Lehrperson darf Runden erstellen.');
-    const result=await call('createRound',{title:$('classTitle').value,students:rowSplit($('studentsInput').value),episodes:rowSplit($('episodesInput').value)});
-    currentRoundId=result.roundId;freshLinks=result.links;
-    // Die persönlichen Links unmittelbar als lokale Datei anbieten.
-    downloadCSV('episoden-zugangslinks.csv',[['Name','Persönlicher Zugangslink'],...freshLinks.map(item=>[item.name,studentUrl(result.roundId,item.token)])]);
-    toast(`Runde erstellt. ${result.links.length} persönliche Links wurden als CSV heruntergeladen.`,8000);
-    openRound(result.roundId,true);
+    const result=await call('createRound',{title:$('classTitle').value,episodes:rowSplit($('episodesInput').value)});
+    currentRoundId=result.roundId;
+    toast('Runde erstellt. Den gemeinsamen Klassenlink findest du in den Rundendetails.',8000);
+    openRound(result.roundId);
     $('createBox').classList.add('hidden');
   }finally{setBusy(button,false);}
 }
-function openRound(roundId,keepLinks=false){
-  currentRoundId=roundId;if(!keepLinks)freshLinks=[];
+function openRound(roundId){
+  currentRoundId=roundId;
   currentRound=teacherRounds.find(r=>r.id===roundId)||null;
-  currentRoster=[];currentResults=[];currentPresence=[];currentView=null;
+  currentResults=[];currentPresence=[];currentView=null;
   clearListeners(teacherUnsubs);
   // Die Rundenliste bleibt mit einer eigenen Subscription aktuell.
-  teacherUnsubs.push(onSnapshot(query(collection(db,'rounds'),where('ownerUid','==',user.uid)),snap=>{
+  teacherUnsubs.push(onSnapshot(query(collection(db,'sharedRounds'),where('ownerUid','==',user.uid)),snap=>{
     teacherRounds=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.toMillis?.()??0)-(a.createdAt?.toMillis?.()??0));
     renderRoundList();
     const newer=teacherRounds.find(r=>r.id===currentRoundId);
     if(newer){const oldEpisodes=JSON.stringify(currentRound?.episodes);currentRound=newer;if(oldEpisodes!==JSON.stringify(newer.episodes) && document.activeElement!==$('editEpisodes'))$('editEpisodes').value=newer.episodes.map(e=>e.label).join('\n');renderDetail();}
   },e=>toast('Rundenübersicht: '+message(e))));
-  const ref=doc(db,'rounds',roundId);
-  teacherUnsubs.push(onSnapshot(collection(ref,'roster'),snapshot=>{
-    currentRoster=snapshot.docs.map(d=>({studentId:d.id,...d.data()})).sort((a,b)=>namesSorter.compare(a.name,b.name));
-    renderRoster();renderDetail();
-  },e=>toast('Klassenliste: '+message(e))));
+  const ref=doc(db,'sharedRounds',roundId);
+  
   teacherUnsubs.push(onSnapshot(collection(ref,'presence'),snap=>{
     currentPresence=snap.docs.map(d=>d.data()).sort((a,b)=>namesSorter.compare(a.name,b.name));
     renderRoster();renderDetail();
@@ -158,16 +154,16 @@ function openRound(roundId,keepLinks=false){
     currentResults=snap.docs.map(d=>d.data());renderGroups();
   },e=>toast('Ergebnisse: '+message(e))));
   $('editEpisodes').value=(currentRound?.episodes||[]).map(e=>e.label).join('\n');
-  $('linksStatus').textContent=freshLinks.length?`${freshLinks.length} Links wurden erstellt und als CSV heruntergeladen.`:'Nach dem Erstellen wurde eine CSV heruntergeladen. Einzelne verlorene Zugänge kannst du unten neu erzeugen.';
+  $('sharedLink').value=studentUrl(roundId);
   show('roundDetail');renderRoundList();renderDetail();
 }
 function renderDetail(){
   if(!currentRound){return;}
-  const open=currentRound.state==='checkin', closing=false;
+  const open=currentRound.state==='checkin', closing=currentRound.state==='closing';
   $('detailTitle').textContent=currentRound.title;
   $('detailCount').textContent=currentPresence.length;
   $('detailEpisodeCount').textContent=currentRound.episodes?.length??0;
-  $('detailRosterCount').textContent=currentRoster.length;
+  $('detailRosterCount').textContent='1';
   $('roundStateLabel').textContent=open?'CHECK-IN OFFEN':closing?'AUSLOSUNG WIRD VORBEREITET':'ERGEBNISSE FREIGEGEBEN';
   if(open||closing){show('openRoundControls');hide('publishedControls');hide('printBtn');$('saveEpisodes').disabled=closing;$('finalizeBtn').disabled=closing;
     $('finalizeBtn').textContent=closing?'Auslosung läuft. Bei Problemen nach 30 Sekunden erneut versuchen.':'Check-in abschließen und auslosen';
@@ -176,27 +172,16 @@ function renderDetail(){
 }
 function renderRoster(){
   const node=$('rosterList');node.replaceChildren();
-  const present=new Set(currentPresence.map(p=>p.studentId));
-  for(const student of currentRoster){
+  for(const student of currentPresence){
     const item=makeElement('div','roster-item');
     const left=makeElement('div');
-    left.append(makeElement('strong','',student.name),makeElement('div',present.has(student.studentId)?'status-in':'status-out',present.has(student.studentId)?'✓ Eingecheckt':student.revoked?'Zugang gesperrt':'Noch nicht eingecheckt'));
+    left.append(makeElement('strong','',student.name),makeElement('div','status-in','✓ Eingecheckt'));
     const actions=makeElement('div','roster-actions');
     if(currentRound?.state==='checkin'){
-      if(present.has(student.studentId))actions.append(makeButton('Check-in aufheben',async()=>{
-        if(!confirm(`Check-in von ${student.name} aufheben? Der alte Link wird gesperrt.`))return;
-        const result=await call('revokeCheckIn',{roundId:currentRoundId,studentId:student.studentId});
-        freshLinks=freshLinks.filter(l=>l.studentId!==student.studentId);freshLinks.push(result);
-        downloadCSV('episoden-neuer-zugang.csv',[['Name','Persönlicher Zugangslink'],[result.name,studentUrl(currentRoundId,result.token)]]);
-        toast('Check-in aufgehoben. Der alte Zugang ist gesperrt. Ein neuer Link wurde heruntergeladen.');
-      }));
-      else actions.append(makeButton('Neuen Link erzeugen',async()=>{
-        if(!confirm(`Neuen persönlichen Link für ${student.name} erzeugen? Der vorherige Link wird ungültig.`))return;
-        const result=await call('rotateInvite',{roundId:currentRoundId,studentId:student.studentId});
-        freshLinks=freshLinks.filter(l=>l.studentId!==student.studentId);freshLinks.push(result);
-        $('linksStatus').textContent=`${freshLinks.length} neue Links bereit zum CSV-Download.`;
-        downloadCSV(`episoden-zugang-${student.studentId.slice(0,8)}.csv`,[['Name','Persönlicher Zugangslink'],[result.name,studentUrl(currentRoundId,result.token)]]);
-        toast('Neuer persönlicher Zugangslink heruntergeladen.');
+      actions.append(makeButton('Check-in entfernen',async()=>{
+        if(!confirm(`Check-in von ${student.name} entfernen? Die Person kann den Namen erneut eingeben.`))return;
+        await call('revokeCheckIn',{roundId:currentRoundId,studentId:student.studentId,authUid:student.authUid});
+        toast('Check-in entfernt. Die Teilnehmerliste wird aktualisiert.');
       }));
     }
     item.append(left,actions);node.append(item);
@@ -213,13 +198,13 @@ async function deleteRound(){
   const typed=prompt(`Runde „${currentRound.title}“ einschließlich Schülernamen und Ergebnissen unwiderruflich löschen? Zum Bestätigen LÖSCHEN eingeben:`);
   if(typed!=='LÖSCHEN')return;
   await call('deleteRound',{roundId:currentRoundId});
-  clearListeners(teacherUnsubs);currentRoundId=null;currentRound=null;currentPresence=[];currentRoster=[];currentResults=[];freshLinks=[];
+  clearListeners(teacherUnsubs);currentRoundId=null;currentRound=null;currentPresence=[];currentResults=[];
   hide('roundDetail');show('createBox');toast('Runde und ihre gespeicherten Daten wurden gelöscht.');
   await startTeacherSession();
 }
 async function finalizeRound(){
-  if(!currentRound||!currentPresence.length){toast('Es muss mindestens eine Person eingecheckt haben.');return;}
-  if(!confirm(`Check-in jetzt verbindlich schließen und ${currentPresence.length} eingecheckte Personen auf ${currentRound.episodes.length} Episoden auslosen? Weitere Check-ins sind danach nicht mehr möglich.`))return;
+  if(!currentRound||(currentRound.state==='checkin'&&!currentPresence.length)){toast('Es muss mindestens eine Person eingecheckt haben.');return;}
+  if(!confirm(`Check-in verbindlich schließen und ${currentPresence.length} Namen auf ${currentRound.episodes.length} Episoden auslosen? Die Namen müssen zuvor mit den Anwesenden abgeglichen sein. Danach sind keine weiteren Check-ins möglich.`))return;
   const b=$('finalizeBtn');setBusy(b,true,'Auslosung läuft …');
   try{const result=await call('finalizeRound',{roundId:currentRoundId});toast(result.alreadyPublished?'Runde ist bereits ausgelost.':`${result.count} Personen wurden erfolgreich zugeteilt.`,8000);}
   finally{setBusy(b,false);}
@@ -240,38 +225,42 @@ async function startStudentSession(){
   if(mode!=='student'||!studentRoundId||!user)return;
   clearListeners(studentUnsubs);
   hide('studentError');
-  const ref=doc(db,'rounds',studentRoundId,'authorized',user.uid);
+  const ref=doc(db,'sharedRounds',studentRoundId,'authorized',user.uid);
   try{
     const member=await getDoc(ref);
     if(member.exists()){
-      studentIdentity=member.data();joinToken=null;
-      try { history.replaceState(null,'',`${linkBase()}#r=${encodeURIComponent(studentRoundId)}`); } catch { /* iFrame-Sandbox */ }
-      watchStudent();
+      studentIdentity=member.data();watchStudent();
     } else {
       studentIdentity=null;
       show('studentJoinArea');hide('studentWaiting');hide('studentResult');hide('waitingSidebar');
-      if(!joinToken){setStudentError('Kein gültiger persönlicher Zugang vorhanden. Öffne deinen ursprünglichen Link erneut.');$('joinBtn').disabled=true;}
-      else $('joinBtn').disabled=false;
+      $('joinBtn').disabled=false;
     }
   }catch(e){setStudentError('Dein Zugang konnte nicht geprüft werden: '+message(e));}
 }
 async function checkIn(){
-  if(!user||!studentRoundId||!joinToken){setStudentError('Persönlicher Zugangslink fehlt.');return;}
+  if(!user||!studentRoundId){setStudentError('Klassenlink fehlt.');return;}
   if(isGoogleUser()){setStudentError('Bitte den Schülerlink in einem privaten Browserfenster öffnen.');return;}
   const b=$('joinBtn');setBusy(b,true,'Check-in wird gespeichert …');
   try{
-    const result=await call('checkIn',{roundId:studentRoundId,token:joinToken});
-    studentIdentity={studentId:result.studentId,name:result.name};joinToken=null;
+    const result=await call('checkIn',{roundId:studentRoundId,name:$('studentNameInput').value});
+    studentIdentity={studentId:result.studentId,name:result.name};
     try { history.replaceState(null,'',`${linkBase()}#r=${encodeURIComponent(studentRoundId)}`); } catch { /* iFrame-Sandbox */ }
     hide('studentError');watchStudent();
-  } catch(e){setStudentError(message(e));} finally{setBusy(b,false);}
+  } catch(e){setStudentError(e?.code==='permission-denied'?'Check-in abgelehnt. Möglicherweise ist der Name schon belegt, die Runde geschlossen oder die neuen Firestore-Regeln fehlen. Bitte Lehrperson informieren.':message(e));} finally{setBusy(b,false);}
 }
 function watchStudent(){
   clearListeners(studentUnsubs);
   if(!studentIdentity)return;
   hide('studentJoinArea');show('studentWaiting');show('waitingSidebar');hide('studentResult');
   $('selfName').textContent=studentIdentity.name;
-  const roundRef=doc(db,'rounds',studentRoundId);
+  const roundRef=doc(db,'sharedRounds',studentRoundId);
+  studentUnsubs.push(onSnapshot(doc(roundRef,'authorized',user.uid),snap=>{
+    if(!snap.exists() && studentIdentity){
+      clearListeners(studentUnsubs);studentIdentity=null;spinning=false;activeAnimation++;resultUnsub=null;
+      hide('studentWaiting');hide('studentResult');hide('waitingSidebar');show('studentJoinArea');$('joinBtn').disabled=false;
+      setStudentError('Dein Check-in wurde von der Lehrperson entfernt. Du kannst dich mit deinem Namen erneut anmelden.');
+    }
+  },e=>setStudentError('Anmeldestatus: '+message(e))));
   studentUnsubs.push(onSnapshot(doc(roundRef,'view','state'),snap=>{
     if(!snap.exists()){setStudentError('Rundenstatus nicht verfügbar.');return;}
     const data=snap.data();
@@ -289,7 +278,7 @@ function watchStudent(){
 let resultUnsub=null;
 function subscribeResult(){
   if(resultUnsub)return;
-  resultUnsub=onSnapshot(doc(db,'rounds',studentRoundId,'results',user.uid),snap=>{
+  resultUnsub=onSnapshot(doc(db,'sharedRounds',studentRoundId,'results',user.uid),snap=>{
     if(!snap.exists())return;
     const result=snap.data();
     if(result.authUid!==user.uid){setStudentError('Die Zuteilung stimmt nicht mit deiner Anmeldung überein.');return;}
@@ -325,7 +314,7 @@ function renderWheel(episodes,rotation){
   ctx.fillStyle='#1b6670';ctx.font='bold 55px system-ui';ctx.textBaseline='middle';ctx.textAlign='center';ctx.fillText('✳',center,center+2);
 }
 function startWheel(index,result){
-  spinning=true;const key=`episoden-spun:${studentRoundId}:${studentIdentity.studentId}`;
+  spinning=true;const key=`episoden-spun:${studentRoundId}:${user.uid}`;
   const arc=2*Math.PI/wheelEpisodes.length;
   const desired=-(index+.5)*arc;
   const diff=(desired-(currentRotation%(2*Math.PI))+Math.PI*6)%(2*Math.PI);

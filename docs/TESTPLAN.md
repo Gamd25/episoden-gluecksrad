@@ -1,17 +1,25 @@
-# Testplan Spark v2
+# Testplan v3
 
-**Vor realen Schülerdaten** prüfen: In Firebase Console Google + Anonymous eingeschaltet, Firestore in gewünschter Region; mit `firebase deploy --project episoden-gluecksrad --only firestore:rules,hosting` neue Regeln und Hosting installiert.
+## Lokal erfolgreich durchführbar (ohne Firebase)
 
-1. Lehrperson meldet sich per Google an. Eine Testrunde mit drei erfundenen Namen und zwei Episoden anlegen. CSV enthält drei verschiedene persönliche Links.
-2. Schülerlink in privatem Browser öffnen: vor Klick keine Check-in-Liste und keine Episode. Einmal klicken: Person erscheint in Live-Liste; wiederholter Klick zählt nicht erneut.
-3. Zweiten Link in zweitem privaten Browser prüfen: Beide sehen zwei Eingecheckte, nicht den dritten, ausstehenden Namen.
-4. Gleichen Link auf anderem Gerät erneut beanspruchen: abweisen; bereits eingecheckter Originalbrowser bleibt bestehen.
-5. Vor Auslosung weder durch direktes Firestore-Abfragen noch in der Oberfläche ein Ergebnis oder Episodenliste für Schüler sichtbar. Gast ohne Mitgliedschaft kann die Presence-Liste nicht lesen.
-6. Lehrperson bearbeitet Episoden; setzt falschen Check-in zurück; erhält einen **neuen** Link und der alte ist ungültig.
-7. Einen parallelen Check-in unmittelbar vor Abschluss ausprobieren. Entweder er wird vollständig berücksichtigt oder sauber wegen geschlossenem Check-in abgelehnt; **niemals** ausgezählt und anschließend ohne Episode.
-8. Lehrperson schließt Check-in. Alle berechtigten Personen erhalten eine unveränderliche individuelle Episode. Gruppengrößen unterscheiden sich höchstens um eins.
-9. Die Lehrperson sieht alle Gruppen und kann die Ergebnis-CSV herunterladen. Schüler A kann das Ergebnis von Schüler B nicht lesen.
-10. Rundendaten löschen; prüfen, dass die alte Runde und alle Unterkollektionen entfernt sind.
-11. Datenzugriffe auf eine zweite, fremde Runde müssen verweigert werden. Firebase Emulator Rules Unit Tests mit parallel ausgeführten Check-ins als zusätzliche sicherheitskritische Freigabeprüfung empfehlen.
+- Node-JavaScript-Syntax von App, Backend und Normalisierung.
+- Namen: Normalisierung, Unicode-Namen, ungültige Namen, Eindeutigkeit bei Groß-/Kleinschreibung.
+- Episodenanzahl von 1 bis 30; zufällige Verteilung für 1 bis 160 Personen mit maximal einer Person Unterschied je Gruppe.
 
-*Es wurde hier kein tatsächlicher Firestore-Emulator-/Livetest durchgeführt.*
+## Unbedingt mit Emulator und mehreren Browsern nachholen (nicht als bestanden behaupten)
+
+1. Regeldatei kompilieren. `sharedRounds` erstellen; Zugriffe auf alte `/rounds` weiterhin prüfen.
+2. Zwei Schüler mit unterschiedlichen Testnamen melden sich gleichzeitig an. Beide dürfen sich in derselben Runde nur einmal anmelden.
+3. Zwei Browser verwenden denselben Namen mit unterschiedlicher Groß-/Kleinschreibung. Genau einer darf erfolgreich sein.
+4. Anonymer Browser ohne Check-in versucht `presence`-Liste, `view` mit Episoden, `results` zu lesen. Muss verweigert werden.
+5. Eingecheckter Browser sieht live die beiden Namen, aber vor Abschluss keine Episoden.
+6. Browser versucht fremden `authorized`- und `results`-Datensatz zu lesen oder Gruppenliste abzufragen. Muss verweigert werden.
+7. Browser versucht fremde Einträge, abgeschlossene Runden oder Ergebnisse zu verändern. Muss verweigert werden.
+8. Lehrperson entfernt einen fehlerhaften Check-in; derselbe Name soll anschließend wieder anmeldbar sein.
+9. Start eines Check-ins gleichzeitig mit dem abschließenden Klick: Es darf nur ganz vor dem Gate-Abschluss oder gar nicht eingecheckt werden. Keine Teil-Zuteilung.
+10. Mehrere Browser mit offenen Ergebnissen erhalten nach `published` ihre eigene Episode, kein fremdes Ergebnis; Gruppen maximal 1 Person Differenz.
+11. Browser/Netz während `closing` unterbrechen. Abschluss nach erneutem Lehrperson-Klick durchführen, ohne Doppelverteilung.
+12. Alte `/rounds` prüfen; keine Änderung der bestehenden Daten.
+13. Testnamen und Testdaten nach Abschluss löschen.
+
+**Status:** Diese Firestore-/Web-Live- und Emulatorprüfungen sind noch NICHT durchgeführt. Bis dahin keine realen Schülerdaten eintragen.

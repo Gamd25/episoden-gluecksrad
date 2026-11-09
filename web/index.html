@@ -18,7 +18,7 @@
       <div class="eyebrow">Gemeinsam · zufällig · gerecht</div>
       <h1>Ein Klick.<br><em>Viele Episoden.</em></h1>
       <p>Alle Schülerinnen und Schüler checken ein. Erst wenn die Lehrperson die Runde schließt, werden die Episoden fair ausgelost.</p>
-      <div class="notice">Für Schülerinnen und Schüler: Öffne deinen <strong>persönlichen Zugangslink</strong>, den du von deiner Lehrperson erhalten hast.</div>
+      <div class="notice">Für Schülerinnen und Schüler: Öffne den <strong>gemeinsamen Klassenlink</strong> und gib deinen Namen ein. Ein Name kann pro Runde nur einmal eingecheckt werden.</div>
       <button id="landingTeacher" class="btn primary" type="button">Zum Lehrerbereich <span aria-hidden="true">→</span></button>
     </section>
 
@@ -30,8 +30,10 @@
           <p id="studentSub" class="muted">Ein Klick genügt. Danach wartest du gemeinsam mit allen anderen auf die Auslosung.</p>
           <div id="studentJoinArea" class="join-area">
             <div class="join-disc" aria-hidden="true"><span>✳</span></div>
+            <label for="studentNameInput">Dein Vor- und Nachname</label>
+            <input id="studentNameInput" type="text" maxlength="60" autocomplete="name" placeholder="Vorname Nachname" required>
             <button id="joinBtn" type="button" class="btn primary giant" disabled>Ich bin dabei! <span aria-hidden="true">✓</span></button>
-            <div class="microcopy">Jede Person kann sich nur einmal anmelden.</div>
+            <div class="microcopy">Der Name kann nur einmal belegt werden. Die Lehrperson prüft die Teilnahme. Eine Namenseingabe ist kein Identitätsnachweis.</div>
           </div>
           <div id="studentWaiting" class="hidden">
             <div class="waiting-check" aria-hidden="true">✓</div>
@@ -58,7 +60,7 @@
     <section id="teacherAuth" class="card auth-card hidden">
       <div class="eyebrow">VERWALTUNG</div>
       <h1>Lehrerbereich</h1>
-      <p class="muted">Hier erstellst du Gruppeneinteilungen, verteilst persönliche Links und gibst die Ergebnisse frei.</p>
+      <p class="muted">Hier erstellst du Gruppeneinteilungen, verteilst einen gemeinsamen Klassenlink und gibst die Ergebnisse frei.</p>
       <button id="loginBtn" type="button" class="btn primary">Mit Google anmelden</button>
       <p class="microcopy">Der Lehrerbereich sollte als eigener Browser-Tab geöffnet werden, nicht innerhalb eines Moodle-iFrames.</p>
     </section>
@@ -77,17 +79,16 @@
             <form id="createForm">
               <label for="classTitle">Bezeichnung der Runde</label>
               <input id="classTitle" type="text" maxlength="100" placeholder="z. B. DIG 2A – Gruppenarbeit" required>
-              <div class="form-columns">
-                <div><label for="studentsInput">Schülernamen <span>ein Name pro Zeile</span></label><textarea id="studentsInput" rows="8" required placeholder="Anna Muster\nLena Beispiel\nSara Demo"></textarea><small id="studentInputCount" class="microcopy">0 Namen</small></div>
+              <div class="form-columns form-columns-one">
                 <div><label for="episodesInput">Episoden <span>ein Titel pro Zeile</span></label><textarea id="episodesInput" rows="8" required>Episode 1\nEpisode 2\nEpisode 3\nEpisode 4\nEpisode 5</textarea><small id="episodeInputCount" class="microcopy">5 Episoden</small></div>
               </div>
-              <p class="microcopy">Nur erfolgreich eingecheckte Personen nehmen teil. Es gibt keine erforderliche Mindestzahl entsprechend der Klassenliste.</p>
+              <p class="microcopy">Es ist keine Klassenliste erforderlich. Die Schülerinnen und Schüler geben ihre Namen selbst ein. Nur tatsächlich eingecheckte Personen nehmen an der Auslosung teil.</p>
               <button class="btn primary" id="createBtn" type="submit">Neue Runde erstellen <span aria-hidden="true">→</span></button>
             </form>
           </section>
           <section class="card hidden" id="roundDetail">
             <div class="detail-head"><div><div id="roundStateLabel" class="eyebrow">CHECK-IN OFFEN</div><h2 id="detailTitle"></h2></div><div class="teacher-head-buttons"><button id="printBtn" type="button" class="btn secondary hidden">Drucken</button><button id="deleteRoundBtn" type="button" class="btn secondary">Runde löschen</button></div></div>
-            <div class="stat-grid"><div class="stat"><strong id="detailCount">0</strong><span>eingecheckt</span></div><div class="stat"><strong id="detailEpisodeCount">0</strong><span>Episoden</span></div><div class="stat"><strong id="detailRosterCount">0</strong><span>Zugangscodes</span></div></div>
+            <div class="stat-grid"><div class="stat"><strong id="detailCount">0</strong><span>eingecheckt</span></div><div class="stat"><strong id="detailEpisodeCount">0</strong><span>Episoden</span></div><div class="stat"><strong id="detailRosterCount">1</strong><span>Klassenlink</span></div></div>
             <div id="openRoundControls">
               <h3>Episoden bearbeiten</h3>
               <p class="microcopy">Bis zur Auslosung kannst du Episoden hinzufügen, entfernen oder umbenennen.</p>
@@ -95,13 +96,14 @@
               <button type="button" id="saveEpisodes" class="btn secondary">Episoden speichern</button>
               <div class="divider"></div>
               <h3>Check-in-Übersicht</h3>
-              <p class="microcopy">Die Liste zeigt alle eingetragenen Schülerinnen und Schüler und markiert, wer schon eingecheckt hat. Die Teilnehmerzahl für die Auslosung ist ausschließlich die Check-in-Anzahl.</p>
+              <p class="microcopy">Die Liste zeigt die selbst eingegebenen Namen. Prüfe vor der Auslosung, ob die eingecheckten Personen tatsächlich anwesend sind. Falsche Einträge kannst du entfernen.</p>
               <div id="rosterList" class="roster-list"></div>
               <div class="divider"></div>
-              <h3>Persönliche Zugangslinks</h3>
-              <p class="microcopy">Die Links werden nur bei Erstellung oder Erneuerung ausgegeben. Bewahre die heruntergeladene CSV vertraulich auf. Ein neuer Link macht den alten ungültig.</p>
-              <div id="linksStatus" class="microcopy">Noch keine neu erzeugten Links in dieser Ansicht.</div>
-              <button id="downloadLinks" type="button" class="btn secondary">Neue Zugangslinks als CSV</button>
+              <h3>Gemeinsamer Klassenlink</h3>
+              <p class="microcopy">Diesen einen Link an die Klasse verteilen, beispielsweise über Moodle. Jede Person gibt ihren eigenen Namen ein. Die Links stehen auch nach einem erneuten Öffnen der Runde bereit.</p>
+              <input id="sharedLink" aria-label="Gemeinsamer Klassenlink" type="text" readonly>
+              <button id="copySharedLink" type="button" class="btn secondary">Klassenlink kopieren</button>
+              <p class="microcopy">Wer den Link erhält, kann einen Namen beanspruchen. Die Lehrperson prüft die Namen und die Anwesenheit vor der Freigabe.</p>
               <div class="divider"></div>
               <div class="closure-box"><h3>Check-in abschließen</h3><p>Prüfe die eingegangenen Namen. Erst durch deinen Abschluss werden alle gültig eingecheckten Personen zufällig eingeteilt.</p><button id="finalizeBtn" type="button" class="btn primary danger-action">Check-in abschließen und auslosen</button></div>
             </div>
@@ -112,7 +114,7 @@
     </section>
     <div id="globalStatus" class="toast hidden" role="status" aria-live="polite"></div>
   </main>
-  <footer class="footer">Episoden-Glücksrad · Getrennt vom ursprünglichen Gefühlskarten-Rad · Personenbezogene Zugänge vertraulich behandeln</footer>
+  <footer class="footer">Episoden-Glücksrad · Getrennt vom ursprünglichen Gefühlskarten-Rad · Klassenlink nur an die vorgesehene Gruppe geben · Keine verifizierte Identität durch Namenseingabe</footer>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

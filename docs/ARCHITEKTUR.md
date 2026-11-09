@@ -1,17 +1,17 @@
-# Spark-Architektur v2
+# Architektur v3 – gemeinsamer Link
 
-Browser (Google-Lehrperson) ↔ Firebase Authentication ↔ Cloud Firestore; Browser (Anonymous-Teilnehmende) ↔ dieselbe Firestore-Datenbank. Keine Functions, kein eigener Server.
+Alte Datenstruktur `/rounds` und deren Zugriffsregeln bleiben unverändert erhalten. Neue Runden liegen ausschließlich unter `/sharedRounds/{rid}` (zufällige UUID im Klassenlink).
 
-- `/rounds/{id}`: ausschließlich Lehrperson lesbar, enthält private Einladungs-IDs und Episoden.
-- `/rounds/{id}/checkinGate/status`: offen oder veröffentlicht; für authentifizierte Geräte lesbar. Kein personenbezogenes Feld.
-- `/rounds/{id}/roster/{64-stelliges-Zufallstoken}`: unbenutzter Einladungsdatensatz. Einzelget nur mit zufälligem Dokumentschlüssel, keine Teilnehmer-Listenrechte.
-- `/rounds/{id}/authorized/{anonymousUid}`: serverseitig durch Rules überprüfte Teilnahmebindung, nur eigene Leserechte.
-- `/rounds/{id}/presence/{anonymousUid}`: eingecheckte Namen, nur nach erfolgreicher eigener Teilnahme lesbar.
-- `/rounds/{id}/view/state`: öffentlicher Rundentitel für Eingecheckte, Episodennamen erst nach Freigabe.
-- `/rounds/{id}/results/{anonymousUid}`: nach `published` nur eigenes Ergebnis lesbar; volle Liste für Lehrperson.
+- `/sharedRounds/{rid}`: Eigentümer UID, Titel, private Episoden, Status.
+- `/sharedRounds/{rid}/gate/status`: lesbarer Check-in-Zustand (`checkin`, `closing`, `published`); wird von jeder Studententransaktion gelesen.
+- `/sharedRounds/{rid}/names/{canonicalName}`: einmalig erzeugte Namenskennung; **nicht** von Teilnehmenden gelistet oder gelesen. Eine zweite Belegung derselben Kennung darf nicht als Update erfolgen.
+- `/sharedRounds/{rid}/authorized/{anonymousUid}`: anonyme Sitzung und Namenskennung; nur eigene Dokumente und Eigentümer lesbar.
+- `/sharedRounds/{rid}/presence/{anonymousUid}`: sichtbar für Lehrperson und erfolgreich eingecheckte Personen, nicht für bloße Besucher.
+- `/sharedRounds/{rid}/view/state`: sichtbarer Teilnehmerstatus ohne Episoden, bis die Veröffentlichung erfolgt.
+- `/sharedRounds/{rid}/results/{anonymousUid}`: eigene Episode erst nach Veröffentlichung; vollständige Ergebnisliste nur für Eigentümer.
 
-Check-in: Eine Firestore-Transaktion liest das Gate, den Einmal-Link und die eigene Teilnahme und erzeugt atomar Roster-Claim, `authorized` und `presence`. Firestore-Rules fordern über `getAfter()` die konsistenten gemeinsamen Änderungen. Re-Login mit bestehender Teilnahme erfolgt ohne erneuten Zählerzuwachs. Ein fremder oder bereits beanspruchter Link wird abgelehnt.
+Der studentische Check-in schreibt per Firestore-Transaktion `names`, `authorized`, `presence`; Regeln verifizieren die gemeinsame Änderung mittels `getAfter()`. Die Identität wird nur über eine anonyme UID und einen selbst eingegebenen Namen gebunden. Ein manipulierender Gast kann sich als anderer Name ausgeben – das bleibt ein **bewusster Sicherheitshinweis, keine gelöste Authentifizierung**.
 
-Auslosung: Die Lehrperson liest **in einer einzigen Firestore-Transaktion** ihre Runde und sämtliche zur Runde gehörigen Roster-Dokumente, verteilt ausschließlich die aktuell beanspruchten Einträge gleichmäßig mit `crypto.getRandomValues` und schreibt Ergebnisse, Gate, Viewer-Status und Rundenzustand im selben Commit. Ein intervenierender Check-in verändert ein gelesenes Dokument und erzwingt Transaktionswiederholung. Keine Veröffentlichung in Teilschritten.
+Die Lehrperson schließt die Runde in Phase 1 durch eine atomare Änderung des Gate-Dokuments auf `closing`. Eine konkurrierende Check-in-Transaktion, die das Gate als offen gelesen hat, wird wiederholt und danach abgelehnt. Erst dann wird die nun stabile Anwesenheitsliste abgefragt. In Phase 2 werden alle Ergebnisse und der Status gemeinsam in einer Transaktion veröffentlicht. Bei Verbindungsabbruch bleibt der `closing`-Zustand reproduzierbar; eine erneute manuelle Finalisierung ist vorgesehen.
 
-Vertrauen: Der Browser der Lehrperson kontrolliert den Zufallsalgorithmus. Das ist keine unabhängig serverattestierte Randomness; manipulierter Client könnte die Verteilung bewusst ändern. Firestore-Rules allein können echte Zufälligkeit nicht nachweisen. Zugangstokens ermöglichen keine prüfbare Moodle-Identität. Für verbindliche Identitäts- oder Manipulationssicherheit ist eine gesonderte Backend-/LTI-Lösung notwendig.
+Keine Cloud Functions, keine SMS, kein App-Check-/Rate-Limit-Schutz, keine Moodle-Konto-Kopplung. Das ist nicht identisch mit einer serverseitig verifizierten Ziehung.

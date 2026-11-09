@@ -9,3 +9,7 @@
 @media print{.site-header,.footer,.teacher-left,#createBox,.teacher-top,#openRoundControls,#exportResults,#printBtn,.toast{display:none!important}.main{padding:0}.card{border:0;box-shadow:none}.teacher-layout{display:block}.teacher-right{display:block}}
 
 .teacher-head-buttons{display:flex;gap:7px;flex-wrap:wrap}.teacher-head-buttons .btn{font-size:.85rem;padding:9px 12px}
+
+.form-columns-one{grid-template-columns:minmax(0,1fr)}
+#studentNameInput{display:block;max-width:390px;margin:8px auto 16px;text-align:center;font-size:1.05rem}
+#sharedLink{font-size:.86rem;overflow-wrap:anywhere}
