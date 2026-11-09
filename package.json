@@ -1,10 +1,10 @@
 {
   "name": "episoden-gluecksrad-spark",
-  "version": "8.0.0",
+  "version": "9.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check web/app.js && node --check web/shared-backend.js && node --check web/shared-logic.js && node --check web/draw-logic.js && node --check web/episode-result.js && node --check web/checkin-status.js && node --check web/wheel-spin-guard.js"
+    "check": "node --check web/app.js && node --check web/shared-backend.js && node --check web/shared-logic.js && node --check web/draw-logic.js && node --check web/episode-result.js && node --check web/checkin-status.js && node --check web/wheel-spin-guard.js && node --check web/wheel-motion.js && node --check web/wheel-audio.js"
   }
 }

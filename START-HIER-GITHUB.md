@@ -1,10 +1,9 @@
-# Episoden-Glücksrad v8 – GitHub Pages und Firebase Spark
+# Episoden-Glücksrad v9 – GitHub Pages aktualisieren
 
-1. Das **kleine GitHub-Update v8** entpacken.
-2. Im bestehenden Repository `Gamd25/episoden-gluecksrad` im Ordner `web/` die Dateien `app.js`, `index.html`, `style.css` aktualisieren und `wheel-spin-guard.js` ergänzen. Das Repository `gefuehle-rad` nicht ändern.
-3. Änderungen committen und unter GitHub → Actions einen neuen erfolgreichen Pages-Deploy prüfen.
-4. `https://gamd25.github.io/episoden-gluecksrad/?release=v8-20261109` neu öffnen. Oben muss `v8 · JS geladen` stehen.
-5. Mit erfundenen Namen einen Check-in durchführen. **Vor** Abschluss durch die Lehrperson darf kein Episodenrad erscheinen.
-6. Nach Abschluss und Freigabe muss der Knopf „Rad drehen“ erscheinen. Mehrfach drehen; immer dieselbe gespeicherte Episode anzeigen.
+1. Das **kleine GitHub-Update v9** entpacken.
+2. Im vorhandenen Repository `Gamd25/episoden-gluecksrad` die beiden Dateien `web/app.js` und `web/index.html` ersetzen und `web/wheel-motion.js` und `web/wheel-audio.js` neu hinzufügen. Alle vier Dateien müssen im Unterordner `web` liegen; keine ZIP-Datei als einzelne Datei hochladen.
+3. Über GitHub → Actions einen erfolgreichen GitHub-Pages-Lauf abwarten und die Seite `https://gamd25.github.io/episoden-gluecksrad/?release=v9-20261109` aufrufen. Oben muss `v9 · JS geladen` stehen.
+4. Wenn die Original-Geräusche lokal unabhängig vom alten Repository gespeichert werden sollen, im **neuen** Repository zusätzlich `web/assets/holz_ratsche.wav` und `web/assets/ding.wav` hochladen. Die WAV-Dateien stammen unverändert aus `Gamd25/gefuehle-rad/assets/` und liegen **nicht** im v9-ZIP; ohne die Kopien verwendet die Anwendung die entsprechenden öffentlichen Audiodateien der alten GitHub-Pages-Seite, sofern erreichbar.
+5. Vor der Auslosung darf niemand drehen. Danach testweise drehen und noch einmal drehen: das Rad soll 4,3 Sekunden lang 6–10 Umdrehungen vollführen, zur *bereits gespeicherten* Episode stoppen und dabei nur die Originalgeräusche verwenden. Die Ergebnisse dürfen sich nicht ändern.
 
-Weder Firebase-Regeln noch Node.js noch Blaze werden für dieses GitHub-Update benötigt. Die Tests sind lokal erfolgreich, die tatsächliche Bereitstellung und Mehrgeräte-Funktion sind noch nicht abgenommen.
+**Nicht notwendig:** neue Firebase-Regeln, Node.js, Blaze-Tarif oder eine weitere Auslosung. Das bisherige `Gamd25/gefuehle-rad` bleibt unverändert. Vor dem Unterricht mit echten Namen ist ein Mehrgeräte-/Berechtigungstest erforderlich.

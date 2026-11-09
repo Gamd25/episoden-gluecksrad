@@ -6,6 +6,8 @@ import { firebaseConfig } from './config.js';
 import { resolveStoredAssignment, visitedWheelKey } from './episode-result.js';
 import { createMembershipWitness } from './checkin-status.js';
 import { canSpinStoredWheel } from './wheel-spin-guard.js?v=8-20261109';
+import { ORIGINAL_WHEEL_SETTINGS, chooseVisualTurns, planStoredLanding, easeOutCubic } from './wheel-motion.js?v=9-20261109';
+import { createOriginalWheelAudio } from './wheel-audio.js?v=9-20261109';
 
 const $ = id => document.getElementById(id);
 const hide = id => $(id).classList.add('hidden');
@@ -18,10 +20,11 @@ let mode = 'landing', user=null, currentRoundId=null, studentRoundId=null, stude
 let teacherUnsubs=[], studentUnsubs=[], currentRound=null, currentResults=[], currentPresence=[], currentView=null;
 let teacherRounds=[], studentEpisode=null, spinning=false, currentRotation=0, activeAnimation=0, wheelEpisodes=[];
 let shownAssignment=null, spinTarget=null, wheelReleased=false;
+const originalWheelAudio=createOriginalWheelAudio();
 let studentWatchSerial=0; // Ungueltige alte Listener- und Serverantworten nicht auf aktuelle Anmeldungen anwenden.
 let toastTimer;
 const deletingRoundIds = new Set();
-const BUILD_VERSION = 'v8';
+const BUILD_VERSION = 'v9';
 const teacherProvider = new GoogleAuthProvider();
 teacherProvider.setCustomParameters({prompt:'select_account'});
 function toast(message,ms=5000){ const e=$('globalStatus');e.textContent=message;show('globalStatus');clearTimeout(toastTimer);toastTimer=setTimeout(()=>hide('globalStatus'),ms); }
@@ -87,6 +90,8 @@ function setup() {
   $('printBtn').addEventListener('click',()=>window.print());
   $('joinBtn').addEventListener('click',safeRun('Check-in',checkIn));
   $('spinWheelBtn').addEventListener('click',safeRun('Rad drehen',spinWheelAgain));
+  document.addEventListener('visibilitychange',()=>{ if(document.hidden)originalWheelAudio.pauseRattle(); });
+  window.addEventListener('pagehide',()=>originalWheelAudio.stop());
   updateInputCounts();
   const route=parseRoute();
   if(route.roundId){studentRoundId=route.roundId;setScreen('student');}else{setScreen('landing');}
@@ -359,7 +364,7 @@ function watchStudent({alreadyVerified=false}={}){
     const data=snap.data();
     $('studentEyebrow').textContent=data.title||'Deine Gruppeneinteilung';
     wheelEpisodes=data.episodes||[];
-    if(data.state==='published'){wheelReleased=true;hide('studentWaiting');hide('waitingSidebar');show('studentResult');$('studentHeading').textContent='Deine Auslosung';$('studentSub').textContent='Die Lehrperson hat den Check-in abgeschlossen.';subscribeResult();}
+    if(data.state==='published'){wheelReleased=true;originalWheelAudio.preload();hide('studentWaiting');hide('waitingSidebar');show('studentResult');$('studentHeading').textContent='Deine Auslosung';$('studentSub').textContent='Die Lehrperson hat den Check-in abgeschlossen.';subscribeResult();}
     else {wheelReleased=false;spinTarget=null;hide('spinWheelBtn');$('spinWheelBtn').disabled=true;show('studentWaiting');show('waitingSidebar');hide('studentResult');$('studentHeading').textContent=data.state==='closing'?'Die Auslosung wird vorbereitet …':'Du bist dabei!';$('studentSub').textContent=data.state==='closing'?'Dein Check-in wurde übernommen. Die Auslosung wird vorbereitet.':'Dein Check-in wurde übernommen. Alle eingecheckten Personen warten gemeinsam auf die Freigabe.';}
   },e=>setStudentError('Status: '+message(e))));
   studentUnsubs.push(onSnapshot(collection(roundRef,'presence'),snap=>{
@@ -403,6 +408,7 @@ function subscribeResult(){
   studentUnsubs.push(()=>{resultUnsub?.();resultUnsub=null;});
 }
 function resetWheelSession(){
+  originalWheelAudio.stop();
   spinning=false;activeAnimation++;shownAssignment=null;studentEpisode=null;
   spinTarget=null;wheelReleased=false;
   $('spinWheelBtn').disabled=true;
@@ -440,18 +446,26 @@ function renderWheel(episodes,rotation){
   ctx.fillStyle='#1b6670';ctx.font='bold 55px system-ui';ctx.textBaseline='middle';ctx.textAlign='center';ctx.fillText('✳',center,center+2);
 }
 function startWheel(index){
+  // Die Ziel-Episode stammt ausschließlich aus dem zuvor veröffentlichten
+  // Firestore-Ergebnis; nur die Zahl der sichtbaren Umdrehungen ist zufällig.
+  if(!canSpinStoredWheel({published:wheelReleased,target:spinTarget,uid:user?.uid,roundId:studentRoundId,spinning,episodes:wheelEpisodes}) || spinTarget.index!==index){
+    throw new Error('Keine bestätigte Episodenzuteilung für dieses Rad verfügbar.');
+  }
   spinning=true;
   const button=$('spinWheelBtn');button.disabled=true;button.textContent='Rad dreht …';
   const key=visitedWheelKey(studentRoundId,user.uid);
-  const arc=2*Math.PI/wheelEpisodes.length;
-  const desired=-(index+.5)*arc;
-  const diff=(desired-(currentRotation%(2*Math.PI))+Math.PI*6)%(2*Math.PI);
-  const start=currentRotation, target=start+Math.PI*2*5+diff;
-  // Auf ausdrücklichen Klick darf die Animation jedes Mal laufen.
-  const duration=window.matchMedia('(prefers-reduced-motion: reduce)').matches?0:3200;
+  const turns=chooseVisualTurns();
+  const {start,target}=planStoredLanding({index,episodeCount:wheelEpisodes.length,currentRotation,turns});
+  // Barrierefreiheit: reduzierte Bewegung hat Vorrang vor der Originaldauer.
+  const duration=window.matchMedia('(prefers-reduced-motion: reduce)').matches?0:ORIGINAL_WHEEL_SETTINGS.durationMs;
   $('spinningLabel').textContent=duration?'Das Glücksrad dreht …':'Die zugeteilte Episode bleibt gleich.';
   // Die Ergebnisbox bleibt während des Drehens sichtbar und unverändert.
+  if(duration)originalWheelAudio.startRattle();
+  let finished=false;
   function finish(){
+    if(finished)return;
+    finished=true;
+    originalWheelAudio.finish(duration>0);
     currentRotation=target;renderWheel(wheelEpisodes,currentRotation);
     $('spinningLabel').textContent='Das Rad zeigt wieder deine gespeicherte Episode.';
     try { localStorage.setItem(key,'1'); } catch { /* Browser blockiert Speicherung */ }
@@ -460,7 +474,14 @@ function startWheel(index){
   }
   if(!duration){finish();return;}
   const started=performance.now(),animationId=++activeAnimation;
-  function frame(now){if(animationId!==activeAnimation)return;const p=Math.min((now-started)/duration,1),easing=1-Math.pow(1-p,4);currentRotation=start+(target-start)*easing;renderWheel(wheelEpisodes,currentRotation);if(p<1)requestAnimationFrame(frame);else finish();}
+  function frame(now){
+    if(animationId!==activeAnimation){originalWheelAudio.stop();return;}
+    const p=Math.min(Math.max((now-started)/duration,0),1);
+    currentRotation=start+(target-start)*easeOutCubic(p);
+    renderWheel(wheelEpisodes,currentRotation);
+    if(p<1)requestAnimationFrame(frame);else finish();
+  }
   requestAnimationFrame(frame);
 }
+
 setup();

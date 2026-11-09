@@ -1,9 +1,7 @@
-# Prüfstatus Episoden-Glücksrad v7 — 09.11.2026
+# Prüfstatus Episoden-Glücksrad v9 — 09.11.2026
 
-**Lokal geprüft:** 30/30 Node.js-Tests bestanden; Syntaxprüfungen aller aktiven JavaScript-Dateien bestanden.
+**Lokal:** 42/42 Node.js-Tests (einschließlich 1–30 Episoden, 6–10 Umdrehungen und beliebigem Anfangswinkel), Syntaxprüfungen sämtlicher aktiver JS-Dateien. Das exakte Landen beim gespeicherten Ergebnis ist rechnerisch getestet. ZIP-CRC und Dateiintegrität werden beim abschließenden Packen geprüft.
 
-**Gezielte Korrekturen:** `deleteRound` listet nur die laut Firestore-Regeln abfragbaren Unterkollektionen `results`, `presence`, `authorized`, `names` und löscht `view/state` sowie `gate/status` einzeln. Der bekannte alte Check-in-Hinweis ist in den aktiven v7-Webdateien nicht vorhanden. Ein Ladeparameter an `app.js` und `shared-backend.js` sowie die sichtbare Markierung `v7 · JS geladen` helfen bei der Diagnose veralteter Versionen.
+**Geltungsbereich:** ausschließlich `web/app.js`, `web/index.html`, neue `web/wheel-motion.js` und `web/wheel-audio.js`; Tests und Dokumentation im vollständigen Projekt. Firestore-Regeln, Datenmodell, Backend, Auslosung, Benutzerverwaltung und altes GitHub-Repository sind unverändert gegenüber v8.
 
-**Nicht durchgeführt:** Live-Bereitstellung auf GitHub, Firebase-Emulator-Regeltests, Tests des echten Firebase-Mehrgerätebetriebs und produktiver Löschtest. Die Sicherheit und Zuverlässigkeit für echte Schülerdaten ist damit nicht abschließend bestätigt.
-
-**Unverändert:** Firestore-Regeln, vorhandene gespeicherte Daten, Firebase-Projekt und altes Repository `Gamd25/gefuehle-rad`.
+**Nicht durchgeführt:** GitHub-Pages-Live-Deploy, echtes Abspielen der originalen WAV-Dateien, Firebase-Emulator-Sicherheitsregeln, realer Mehrgeräte- und UI-Test. Original-WAV-Dateien lagen nicht vor und sind daher nicht im ZIP. Die genaue Verfügbarkeit der Audiodateien im ursprünglichen GitHub-Projekt wurde hier nicht live geprüft.

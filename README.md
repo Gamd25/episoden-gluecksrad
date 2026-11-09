@@ -1,4 +1,4 @@
-# Episoden-Glücksrad – Spark v4: gemeinsamer Check-in-Link und dauerhafte Episodenanzeige
+# Episoden-Glücksrad – Spark v9: gemeinsamer Check-in-Link, dauerhaftes Ergebnis und Original-Radverhalten
 
 **Stand: 09.11.2026.** Für das **neue** Repository `Gamd25/episoden-gluecksrad` und das **separate** Firebase-Projekt `episoden-gluecksrad`. Das ursprüngliche `Gamd25/gefuehle-rad` wird weder verändert noch überschrieben.
 
@@ -20,15 +20,13 @@
 
 ## Aktualisierung der bestehenden GitHub-Pages-Installation – OHNE Node.js
 
-1. **Nur** das Repository `Gamd25/episoden-gluecksrad` aktualisieren. Die Änderungen betreffen `web/app.js`, `web/index.html`, `web/style.css` sowie die neue Datei `web/episode-result.js`.
-2. Diese Dateien an den vorhandenen Pfaden im GitHub-Repository ersetzen bzw. ergänzen. Das Archiv „GitHub-Update v4“ enthält nur diese vier Dateien. Bei bestehendem Repository bietet sich GitHub Desktop an; über die Weboberfläche können vorhandene Dateien auch einzeln bearbeitet und die neue Datei angelegt werden. **Keine ZIP-Datei als einzige Datei hochladen.**
-3. GitHub → **Actions**: erfolgreiche GitHub-Pages-Veröffentlichung mit grünem Häkchen prüfen.
-4. https://gamd25.github.io/episoden-gluecksrad/ mit Strg+F5 neu laden.
-5. Mit **erfundenen Namen** testen: Einchecken → Lehrerabschluss → Episode deutlich unter dem Rad → Seite schließen und im gleichen Browser mit denselben Browserdaten erneut öffnen → dieselbe Episode erscheint wieder. Ebenso mit zwei Schüler-Browsersitzungen und einem Versuch, denselben Namen doppelt einzutragen, prüfen.
+1. Die kleine **GitHub-Update-v9-ZIP** entpacken.
+2. **Nur** das Repository `Gamd25/episoden-gluecksrad` aktualisieren. Im Ordner `web/` `app.js` und `index.html` ersetzen sowie `wheel-motion.js` und `wheel-audio.js` ergänzen. Die ZIP nicht unverändert als einzelne Datei hochladen.
+3. Optional für selbstständige Tondateien aus `Gamd25/gefuehle-rad/assets/` die unveränderten Original-Dateien `holz_ratsche.wav` und `ding.wav` ins Verzeichnis `web/assets/` kopieren. Ohne diese Kopien versucht die Anwendung die entsprechenden öffentlichen GitHub-Pages-Dateien des Gefühls-Rads abzuspielen. Ob diese URLs noch erreichbar sind, konnte hier nicht live geprüft werden.
+4. Unter GitHub → Actions den erfolgreichen Pages-Deploy prüfen. `https://gamd25.github.io/episoden-gluecksrad/?release=v9-20261109` öffnen; die Kennung `v9 · JS geladen` muss erscheinen.
+5. Mit fiktiven Namen prüfen, dass das Rad vor Freigabe verborgen bleibt, nach der Freigabe 4,3 Sekunden dreht und bei wiederholtem Drehen immer bei derselben Episode hält.
 
-**Für dieses v4-Update müssen die bereits aktiven v3-Firestore-Regeln nicht erneut veröffentlicht werden**, weil die Datenbankzugriffe, Datenstrukturen und Sicherheitsregeln unverändert bleiben. Die bestehenden Runden und Ergebnisse werden nicht migriert oder verändert.
-
-**Grenze:** Nach Löschen von Browserdaten, im privaten Fenster nach dessen Schließen oder auf einem anderen Gerät kann Firebase Anonymous Auth eine neue Identität vergeben. Aus dem gemeinsamen Link und dem frei eingegebenen Namen darf keine alte Zuteilung an eine neue Identität ausgegeben werden. Für die verlässliche geräteübergreifende Wiederherstellung wäre eine authentifizierte Schulidentität erforderlich.
+Keine Änderungen an `firestore.rules`, Firestore-Daten, Firebase-Projekt, altem Repository oder GitHub-Workflow nötig.
 
 ## Betrieb und Grenzen
 
@@ -55,3 +53,7 @@ Version v7: Korrektur der Firestore-Löschung und Cache-Busting für die echte J
 ## Neu in v8
 
 Nach der Freigabe durch die Lehrperson startet jede eingecheckte Person ihr Glücksrad selbst mit „Rad drehen“ und kann das Drehen beliebig oft wiederholen. Die unveränderliche Firestore-Zuteilung bleibt bestehen; vor Freigabe gibt es keinen Dreh zur Episodenzuteilung.
+
+## v9: Originaldrehung und Ton
+
+Das Schüler-Rad dreht 4,3 Sekunden, mit 6–10 zufälligen *visuellen* Umdrehungen und kubischem Abbremsen. Ziel bleibt die zuvor freigegebene Episode. Währenddessen wird die Holzratsche wiederholt abgespielt, beim Stopp einmal der Ding-Klang (jeweils Lautstärke 0,85). Original-WAV-Dateien bitte vorzugsweise aus `Gamd25/gefuehle-rad/assets/` nach `web/assets/` kopieren; andernfalls verweist die Anwendung auf die entsprechenden GitHub-Pages-Dateien des Gefühls-Rads. Die Original-WAV-Dateien sind nicht Bestandteil dieses ZIP.

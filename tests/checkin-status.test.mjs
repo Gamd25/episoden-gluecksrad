@@ -41,8 +41,8 @@ test('web app uses status witness and two independent checks, with neutral messa
  assert.match(app,/Dein Check-in wurde übernommen\. Warte auf den Abschluss/);
 });
 
-test('deployment has visible v8 marker and version-busted app and CSS requests',()=>{
- assert.match(html,/id="buildBadge" class="build-version"[^>]*>Lädt v8/);
- assert.match(html,/src="\.\/app\.js\?v=8-20261109"/);
+test('deployment has visible v9 marker and version-busted app requests',()=>{
+ assert.match(html,/id="buildBadge" class="build-version"[^>]*>Lädt v9/);
+ assert.match(html,/src="\.\/app\.js\?v=9-20261109"/);
  assert.match(html,/href="\.\/style\.css\?v=8-20261109"/);
 });
