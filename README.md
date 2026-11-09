@@ -1,5 +1,7 @@
 # Episoden-Glücksrad – Spark v9: gemeinsamer Check-in-Link, dauerhaftes Ergebnis und Original-Radverhalten
 
+https://gamd25.github.io/episoden-gluecksrad/
+
 **Stand: 09.11.2026.** Für das **neue** Repository `Gamd25/episoden-gluecksrad` und das **separate** Firebase-Projekt `episoden-gluecksrad`. Das ursprüngliche `Gamd25/gefuehle-rad` wird weder verändert noch überschrieben.
 
 ## Neues Verhalten
