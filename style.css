@@ -18,3 +18,6 @@
 #myEpisode.result-box{border:2px solid #187d7e;background:#e8f6f1;box-shadow:0 8px 22px #14585d17;gap:9px;padding:24px 20px}
 #myEpisode.result-box strong{display:block;font-size:clamp(1.65rem,4.6vw,2.5rem);line-height:1.15;color:#103d48;overflow-wrap:anywhere}
 #myEpisode .result-note{font-size:.83rem;line-height:1.5;margin:9px 0 0;color:#526e72}
+
+/* Visible release marker for deployment verification. */
+.build-version{font-size:.76rem;font-weight:800;letter-spacing:.02em;padding:.16rem .4rem;border-radius:.42rem;color:#17474b;background:#def2ef;white-space:nowrap}

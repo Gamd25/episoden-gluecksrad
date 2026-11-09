@@ -4,6 +4,7 @@ import { getFirestore, collection, doc, getDocFromServer, onSnapshot, query, whe
 import { createRound as createSparkRound, checkIn as sparkCheckIn, changeEpisodes as sparkChangeEpisodes, revokeCheckIn as sparkRevoke, finalizeRound as sparkFinalize, deleteRound as sparkDelete } from './shared-backend.js';
 import { firebaseConfig } from './config.js';
 import { resolveStoredAssignment, visitedWheelKey } from './episode-result.js';
+import { createMembershipWitness } from './checkin-status.js';
 
 const $ = id => document.getElementById(id);
 const hide = id => $(id).classList.add('hidden');
@@ -233,7 +234,7 @@ async function startStudentSession(){
   try{
     const member=await getDocFromServer(ref);
     if(member.exists()){
-      studentIdentity=member.data();watchStudent();
+      studentIdentity=member.data();watchStudent({alreadyVerified:true});
     } else {
       studentIdentity=null;
       show('studentJoinArea');hide('studentWaiting');hide('studentResult');hide('waitingSidebar');
@@ -249,10 +250,10 @@ async function checkIn(){
     const result=await call('checkIn',{roundId:studentRoundId,name:$('studentNameInput').value});
     studentIdentity={studentId:result.studentId,name:result.name};
     try { history.replaceState(null,'',`${linkBase()}#r=${encodeURIComponent(studentRoundId)}`); } catch { /* iFrame-Sandbox */ }
-    hide('studentError');watchStudent();
+    hide('studentError');watchStudent({alreadyVerified:false});
   } catch(e){setStudentError(e?.code==='permission-denied'?'Check-in abgelehnt. Möglicherweise ist der Name schon belegt, die Runde geschlossen oder die neuen Firestore-Regeln fehlen. Bitte Lehrperson informieren.':message(e));} finally{setBusy(b,false);}
 }
-function watchStudent(){
+function watchStudent({alreadyVerified=false}={}){
   clearListeners(studentUnsubs);
   if(!studentIdentity)return;
   // Alte Zeichnungen/Ergebnisse dürfen nicht in eine neue Sitzung hineinragen.
@@ -262,33 +263,50 @@ function watchStudent(){
   const watchedUid=user.uid;
   const watchedStudentId=studentIdentity.studentId;
   let checkingRemoval=false;
+  const witness=createMembershipWitness({alreadyVerified});
   hide('studentJoinArea');show('studentWaiting');show('waitingSidebar');hide('studentResult');
   $('selfName').textContent=studentIdentity.name;
   $('studentHeading').textContent='Du bist dabei!';
   $('studentSub').textContent='Dein Check-in wurde übernommen. Warte auf den Abschluss durch die Lehrperson.';
   const roundRef=doc(db,'sharedRounds',studentRoundId);
   const authRef=doc(roundRef,'authorized',watchedUid);
-  // Firestore kann zunaechst einen veralteten Cache-Stand ohne das gerade
-  // angelegte Dokument liefern. Dieser ist KEIN Beleg fuer eine Entfernung.
+  // Nur ein zuvor vom Server bestaetigter Check-in darf nach einer weiteren
+  // unabhaengigen Serverkontrolle als nicht mehr vorhanden gelten.
+  // Ein initiales 'nicht vorhanden' nach erfolgreicher Transaktion oder aus
+  // dem Offline-Cache ist KEIN Beleg fuer das Entfernen durch die Lehrperson.
   studentUnsubs.push(onSnapshot(authRef,async snap=>{
     if(watchId!==studentWatchSerial || !studentIdentity || user?.uid!==watchedUid || studentIdentity.studentId!==watchedStudentId)return;
-    if(snap.exists()){
-      if(snap.data().studentId!==watchedStudentId)setStudentError('Dein Anmeldestatus passt nicht zu deinem Check-in. Bitte die Lehrperson informieren.');
-      return;
+    if(snap.exists() && snap.data().studentId!==watchedStudentId){
+      setStudentError('Dein Anmeldestatus passt nicht zu deinem Check-in. Bitte die Lehrperson informieren.');return;
     }
-    if(snap.metadata.fromCache || checkingRemoval)return;
-    // Erst eine unabhaengige Serverabfrage belegt die tatsaechliche Loeschung.
+    const observation=witness.observe({exists:snap.exists(),fromCache:snap.metadata.fromCache});
+    if(observation==='present'){
+      hide('studentError');return;
+    }
+    if(observation!=='verify-absence' || checkingRemoval)return;
     checkingRemoval=true;
     try{
       const verified=await getDocFromServer(authRef);
       if(watchId!==studentWatchSerial || !studentIdentity || user?.uid!==watchedUid || studentIdentity.studentId!==watchedStudentId)return;
-      if(verified.exists())return;
+      if(verified.exists()){
+        if(verified.data().studentId!==watchedStudentId)setStudentError('Dein Anmeldestatus passt nicht zu deinem Check-in. Bitte die Lehrperson informieren.');
+        else {witness.serverConfirmed();hide('studentError');}
+        return;
+      }
+      // Der erste fehlende Server-Lesewert reicht noch nicht: nochmals pruefen.
+      const secondCheck=await getDocFromServer(authRef);
+      if(watchId!==studentWatchSerial || !studentIdentity || user?.uid!==watchedUid || studentIdentity.studentId!==watchedStudentId)return;
+      if(secondCheck.exists()){
+        if(secondCheck.data().studentId!==watchedStudentId)setStudentError('Dein Anmeldestatus passt nicht zu deinem Check-in. Bitte die Lehrperson informieren.');
+        else {witness.serverConfirmed();hide('studentError');}
+        return;
+      }
       ++studentWatchSerial;
       clearListeners(studentUnsubs);studentIdentity=null;spinning=false;activeAnimation++;resultUnsub=null;shownAssignment=null;studentEpisode=null;hide('myEpisode');
       hide('studentWaiting');hide('studentResult');hide('waitingSidebar');show('studentJoinArea');$('joinBtn').disabled=false;
-      $('studentHeading').textContent='Bereit zum Check-in?';
-      $('studentSub').textContent='Du kannst dich erneut anmelden, solange die Runde offen ist.';
-      setStudentError('Dein Check-in wurde von der Lehrperson entfernt. Du kannst dich mit deinem Namen erneut anmelden.');
+      $('studentHeading').textContent='Check-in nicht mehr aktiv';
+      $('studentSub').textContent='Die Anmeldung ist nicht mehr in Firebase gespeichert.';
+      setStudentError('Dein Check-in ist nicht mehr aktiv. Bitte informiere die Lehrperson oder melde dich erneut an, solange die Runde offen ist.');
     }catch(e){
       if(watchId===studentWatchSerial)setStudentError('Dein Anmeldestatus konnte gerade nicht geprüft werden: '+message(e));
     }finally{checkingRemoval=false;}
