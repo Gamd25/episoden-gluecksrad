@@ -21,3 +21,10 @@
 
 /* Visible release marker for deployment verification. */
 .build-version{font-size:.76rem;font-weight:800;letter-spacing:.02em;padding:.16rem .4rem;border-radius:.42rem;color:#17474b;background:#def2ef;white-space:nowrap}
+
+/* v6: eigener Lösch-Button je Runde, getrennt von der Auswahl */
+.round-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:stretch}
+.round-row .round-item{min-width:0}
+.round-delete{cursor:pointer;align-self:stretch;background:#fff5f3;border:1px solid #d6a49b;border-radius:9px;color:#8b352d;font-size:.77rem;font-weight:700;padding:9px 8px;min-width:65px}
+.round-delete:hover,.round-delete:focus-visible{background:#fce6e1;border-color:#bb6655}
+.round-delete:disabled{opacity:.55;cursor:wait}

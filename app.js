@@ -19,6 +19,8 @@ let teacherRounds=[], studentEpisode=null, spinning=false, currentRotation=0, ac
 let shownAssignment=null;
 let studentWatchSerial=0; // Ungueltige alte Listener- und Serverantworten nicht auf aktuelle Anmeldungen anwenden.
 let toastTimer;
+const deletingRoundIds = new Set();
+const BUILD_VERSION = 'v6';
 const teacherProvider = new GoogleAuthProvider();
 teacherProvider.setCustomParameters({prompt:'select_account'});
 function toast(message,ms=5000){ const e=$('globalStatus');e.textContent=message;show('globalStatus');clearTimeout(toastTimer);toastTimer=setTimeout(()=>hide('globalStatus'),ms); }
@@ -54,6 +56,8 @@ function makeElement(tag,className,text){const e=document.createElement(tag);if(
 function makeButton(label,fn){const b=makeElement('button','btn-mini',label);b.type='button';b.addEventListener('click',safeRun(label,fn));return b;}
 
 function setup() {
+  const buildBadge=$('buildBadge')||document.querySelector('.build-version');
+  if(buildBadge)buildBadge.textContent=BUILD_VERSION+' · JS geladen';
   $('teacherNav').addEventListener('click',()=>openTeacher());
   $('landingTeacher').addEventListener('click',()=>openTeacher());
   $('loginBtn').addEventListener('click',safeRun('Anmeldung',async()=>{
@@ -119,9 +123,19 @@ function renderRoundList(){
   const list=$('roundList');list.replaceChildren();$('roundTotal').textContent=teacherRounds.length;
   if(!teacherRounds.length){list.append(makeElement('p','microcopy','Noch keine gemeinsamen Klassenrunden vorhanden.'));return;}
   for(const round of teacherRounds){
+    // Kein verschachtelter Button: Auswahl und Löschen bleiben getrennte Aktionen.
+    const row=makeElement('div','round-row');
     const b=makeElement('button','round-item'+(round.id===currentRoundId?' active':''));b.type='button';
-    b.append(makeElement('strong','',round.title),makeElement('small','',round.state==='published'?'Ausgelost':'Check-in offen'));
-    b.addEventListener('click',()=>openRound(round.id));list.append(b);
+    const state=round.state==='published'?'Ausgelost':round.state==='deleting'?'Löschung noch offen':round.state==='closing'?'Auslosung läuft':'Check-in offen';
+    b.append(makeElement('strong','',round.title),makeElement('small','',state));
+    b.addEventListener('click',()=>openRound(round.id));
+    const remove=makeElement('button','round-delete',round.state==='deleting'?'Fortsetzen':'Löschen');remove.type='button';
+    remove.setAttribute('aria-label',`Runde ${round.title} löschen`);
+    remove.disabled=deletingRoundIds.has(round.id);
+    remove.addEventListener('click',safeRun('Runde löschen',async()=>{
+      await deleteRoundById(round.id,round.title);
+    }));
+    row.append(b,remove);list.append(row);
   }
 }
 async function createRound(){
@@ -168,7 +182,12 @@ function renderDetail(){
   $('detailCount').textContent=currentPresence.length;
   $('detailEpisodeCount').textContent=currentRound.episodes?.length??0;
   $('detailRosterCount').textContent='1';
-  $('roundStateLabel').textContent=open?'CHECK-IN OFFEN':closing?'AUSLOSUNG WIRD VORBEREITET':'ERGEBNISSE FREIGEGEBEN';
+  $('roundStateLabel').textContent=currentRound.state==='deleting'?'LÖSCHUNG UNVOLLSTÄNDIG':open?'CHECK-IN OFFEN':closing?'AUSLOSUNG WIRD VORBEREITET':'ERGEBNISSE FREIGEGEBEN';
+  if(currentRound.state==='deleting'){
+    hide('openRoundControls');hide('publishedControls');hide('printBtn');
+    $('deleteRoundBtn').textContent='Löschung fortsetzen';return;
+  }
+  $('deleteRoundBtn').textContent='Runde löschen';
   if(open||closing){show('openRoundControls');hide('publishedControls');hide('printBtn');$('saveEpisodes').disabled=closing;$('finalizeBtn').disabled=closing;
     $('finalizeBtn').textContent=closing?'Auslosung läuft. Bei Problemen nach 30 Sekunden erneut versuchen.':'Check-in abschließen und auslosen';
     if(closing){$('finalizeBtn').disabled=false;$('finalizeBtn').textContent='Auslosung fortsetzen (ggf. nach 30 Sekunden)';}
@@ -198,13 +217,35 @@ async function saveEpisodes(){
   await call('changeEpisodes',{roundId:currentRoundId,episodes:lines});toast('Episoden gespeichert.');
 }
 async function deleteRound(){
-  if(!currentRound) return;
-  const typed=prompt(`Runde „${currentRound.title}“ einschließlich Schülernamen und Ergebnissen unwiderruflich löschen? Zum Bestätigen LÖSCHEN eingeben:`);
+  if(!currentRoundId || !currentRound) return;
+  await deleteRoundById(currentRoundId,currentRound.title);
+}
+async function deleteRoundById(roundId,title){
+  // Das Ziel vor jeder Rückfrage fixieren; eine parallele Listenauswahl darf
+  // nicht versehentlich die falsche Runde löschen.
+  const round=teacherRounds.find(r=>r.id===roundId);
+  if(!round || round.title!==title || !isGoogleUser()){
+    throw new Error('Runde nicht gefunden oder kein berechtigter Lehrerzugang. Bitte die Liste neu laden.');
+  }
+  if(deletingRoundIds.has(roundId))return;
+  const typed=prompt(`Runde „${title}“ samt Check-ins und Episodenergebnissen endgültig löschen?\n\nGib exakt LÖSCHEN ein:`);
   if(typed!=='LÖSCHEN')return;
-  await call('deleteRound',{roundId:currentRoundId});
-  clearListeners(teacherUnsubs);currentRoundId=null;currentRound=null;currentPresence=[];currentResults=[];
-  hide('roundDetail');show('createBox');toast('Runde und ihre gespeicherten Daten wurden gelöscht.');
-  await startTeacherSession();
+  deletingRoundIds.add(roundId);renderRoundList();
+  try{
+    await call('deleteRound',{roundId});
+    // Erst nach bestätigter Datenbank-Löschung die UI ändern.
+    if(currentRoundId===roundId){
+      clearListeners(teacherUnsubs);currentRoundId=null;currentRound=null;
+      currentPresence=[];currentResults=[];currentView=null;
+      hide('roundDetail');show('createBox');
+      await startTeacherSession();
+    }
+    // Keine anderen geöffneten Runden antasten.
+    toast(`Runde „${title}“ wurde gelöscht.`,6500);
+  }catch(e){
+    toast(`Löschen nicht abgeschlossen: ${message(e)}. Bitte dieselbe Runde später erneut löschen.`,11000);
+    throw e;
+  }finally{deletingRoundIds.delete(roundId);renderRoundList();}
 }
 async function finalizeRound(){
   if(!currentRound||(currentRound.state==='checkin'&&!currentPresence.length)){toast('Es muss mindestens eine Person eingecheckt haben.');return;}
