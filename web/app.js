@@ -1,0 +1,343 @@
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js';
+import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInAnonymously, signOut } from 'https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js';
+import { getFirestore, collection, doc, getDoc, onSnapshot, query, where } from 'https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js';
+import { createRound as createSparkRound, checkIn as sparkCheckIn, changeEpisodes as sparkChangeEpisodes, rotateInvite as sparkRotateInvite, finalizeRound as sparkFinalize, deleteRound as sparkDelete } from './spark-backend.js';
+import { firebaseConfig } from './config.js';
+
+const $ = id => document.getElementById(id);
+const hide = id => $(id).classList.add('hidden');
+const show = id => $(id).classList.remove('hidden');
+const colors = ['#268c94','#e9ae52','#7daed0','#ce746a','#7e9e7e','#927eb5','#d38e58','#46a4a7','#b46d8c','#97a45b'];
+const rowSplit = raw => raw.split(/\r?\n/u).map(s=>s.trim()).filter(Boolean);
+const namesSorter = new Intl.Collator('de',{sensitivity:'base'});
+let app,auth,db;
+let mode = 'landing', user=null, currentRoundId=null, studentRoundId=null, joinToken=null, studentIdentity=null;
+let teacherUnsubs=[], studentUnsubs=[], currentRound=null, currentRoster=[], currentResults=[], currentPresence=[], currentView=null;
+let teacherRounds=[], freshLinks=[], studentEpisode=null, spinning=false, currentRotation=0, activeAnimation=0, wheelEpisodes=[];
+let toastTimer;
+const teacherProvider = new GoogleAuthProvider();
+teacherProvider.setCustomParameters({prompt:'select_account'});
+function toast(message,ms=5000){ const e=$('globalStatus');e.textContent=message;show('globalStatus');clearTimeout(toastTimer);toastTimer=setTimeout(()=>hide('globalStatus'),ms); }
+function message(error) { const raw=String(error?.message||error||'Unbekannter Fehler.'); return raw.replace(/^FirebaseError:\s*/u,'').replace(/^functions\/[\w-]+:\s*/u,'').slice(0,400); }
+function safeRun(label, callback) { return async (...args)=>{ try { await callback(...args); } catch(e) { console.error(label,e); toast(`${label}: ${message(e)}`,8000); } }; }
+function setBusy(button,busy,label) { button.disabled=busy; if(busy) {button.dataset.oldLabel=button.textContent;button.textContent=label||'Bitte warten …';} else if(button.dataset.oldLabel) {button.textContent=button.dataset.oldLabel;delete button.dataset.oldLabel;} }
+function setScreen(next) { mode=next; ['landing','studentApp','teacherAuth','teacherApp'].forEach(id=>hide(id));show(next==='landing'?'landing':next==='student'?'studentApp':next==='teacher'?'teacherApp':'teacherAuth'); }
+function clearListeners(list){ list.splice(0).forEach(unsub=>{try{unsub();}catch{}}); }
+function linkBase(){return `${location.origin}${location.pathname}`;}
+function studentUrl(roundId,token){return `${linkBase()}#r=${encodeURIComponent(roundId)}&code=${encodeURIComponent(token)}`;}
+function downloadCSV(filename,rows){
+ const csv='\ufeff'+rows.map(row=>row.map(value=>'"'+String(value??'').replace(/"/gu,'""')+'"').join(';')).join('\r\n')+'\r\n';
+ const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob);
+ const a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function call(name,data){
+  if(!user) throw new Error('Bitte zuerst anmelden.');
+  const id=data?.roundId;
+  switch(name){
+    case 'createRound': return createSparkRound(db,user.uid,data);
+    case 'checkIn': return sparkCheckIn(db,user.uid,id,data.token);
+    case 'changeEpisodes': return sparkChangeEpisodes(db,user.uid,id,data.episodes);
+    case 'finalizeRound': return sparkFinalize(db,user.uid,id);
+    case 'rotateInvite': return sparkRotateInvite(db,user.uid,id,data.studentId,false);
+    case 'revokeCheckIn': return sparkRotateInvite(db,user.uid,id,data.studentId,true);
+    case 'deleteRound': return sparkDelete(db,user.uid,id);
+    default: throw new Error('Unbekannte Aktion.');
+  }
+}
+function configured(){return Boolean(firebaseConfig?.apiKey && !String(firebaseConfig.apiKey).startsWith('HIER_') && firebaseConfig.projectId && !String(firebaseConfig.projectId).startsWith('HIER_'));}
+function updateInputCounts(){$('studentInputCount').textContent=`${rowSplit($('studentsInput').value).length} Namen`;$('episodeInputCount').textContent=`${rowSplit($('episodesInput').value).length} Episoden`;}
+function parseRoute(){const args=new URLSearchParams(location.hash.replace(/^#/u,''));return {roundId:args.get('r'),token:args.get('code')};}
+function makeElement(tag,className,text){const e=document.createElement(tag);if(className)e.className=className;if(text!==undefined)e.textContent=String(text);return e;}
+function makeButton(label,fn){const b=makeElement('button','btn-mini',label);b.type='button';b.addEventListener('click',safeRun(label,fn));return b;}
+
+function setup() {
+  $('teacherNav').addEventListener('click',()=>openTeacher());
+  $('landingTeacher').addEventListener('click',()=>openTeacher());
+  $('loginBtn').addEventListener('click',safeRun('Anmeldung',async()=>{
+    const credential=await signInWithPopup(auth,teacherProvider);
+    if(credential.user) openTeacher();
+  }));
+  $('newRoundBtn').addEventListener('click',()=>{show('createBox');$('classTitle').focus();});
+  $('deleteRoundBtn').addEventListener('click',safeRun('Runde löschen',deleteRound));
+  $('logoutBtn').addEventListener('click',safeRun('Abmeldung',async()=>{clearListeners(teacherUnsubs);await signOut(auth);user=null;setScreen('teacherAuth');}));
+  $('createForm').addEventListener('submit',event=>{event.preventDefault();createRound().catch(e=>{console.error(e);toast(message(e),8000);});});
+  $('studentsInput').addEventListener('input',updateInputCounts);$('episodesInput').addEventListener('input',updateInputCounts);
+  $('saveEpisodes').addEventListener('click',safeRun('Episoden speichern',saveEpisodes));
+  $('finalizeBtn').addEventListener('click',safeRun('Auslosung',finalizeRound));
+  $('downloadLinks').addEventListener('click',()=>{
+    if(!freshLinks.length){toast('Bitte neue Links erzeugen oder die beim Erstellen gespeicherte CSV verwenden.');return;}
+    downloadCSV('episoden-zugangslinks.csv',[['Name','Persönlicher Zugangslink'],...freshLinks.map(item=>[item.name,studentUrl(currentRoundId,item.token)])]);
+  });
+  $('exportResults').addEventListener('click',()=>{
+    if(!currentResults.length){toast('Noch keine veröffentlichten Ergebnisse.');return;}
+    const byId=new Map(currentRound.episodes.map(e=>[e.id,e.label]));
+    const sorted=[...currentResults].sort((a,b)=>namesSorter.compare(a.name,b.name));
+    downloadCSV('episoden-ergebnisse.csv',[['Name','Episode'],...sorted.map(s=>[s.name,byId.get(s.episodeId)||s.episodeLabel])]);
+  });
+  $('printBtn').addEventListener('click',()=>window.print());
+  $('joinBtn').addEventListener('click',safeRun('Check-in',checkIn));
+  updateInputCounts();
+  const route=parseRoute();
+  if(route.roundId){studentRoundId=route.roundId;joinToken=route.token;setScreen('student');}else{setScreen('landing');}
+  if(!configured()){
+    $('connection').textContent='Einrichtung fehlt';
+    $('loginBtn').disabled=true;$('joinBtn').disabled=true;
+    const tip='Firebase ist noch nicht eingerichtet. Bitte web/config.js mit der Firebase-Webkonfiguration ausfüllen und die Firestore-Regeln bereitstellen.';
+    $('studentError').textContent=tip;show('studentError');toast(tip,12000);return;
+  }
+  app=initializeApp(firebaseConfig);auth=getAuth(app);db=getFirestore(app);
+  onAuthStateChanged(auth,async loggedInUser=>{
+    user=loggedInUser;$('connection').textContent=loggedInUser?'Verbunden':'Nicht angemeldet';
+    if(mode==='student'){
+      if(!loggedInUser){try{await signInAnonymously(auth);}catch(e){setStudentError(message(e));}}
+      else {await startStudentSession();}
+    } else if(mode==='teacher' || mode==='teacherAuth'){
+      if(isGoogleUser()) await startTeacherSession();else setScreen('teacherAuth');
+    }
+  },e=>{console.error(e);$('connection').textContent='Verbindungsfehler';toast(message(e));});
+}
+function isGoogleUser(){return Boolean(user?.providerData?.some(p=>p.providerId==='google.com'));}
+function openTeacher(){clearListeners(studentUnsubs);studentIdentity=null;mode='teacherAuth';if(!configured()){setScreen('teacherAuth');return;}if(isGoogleUser()) startTeacherSession().catch(e=>toast(message(e)));else setScreen('teacherAuth');}
+
+async function startTeacherSession(){
+  if(!isGoogleUser())return;
+  setScreen('teacher');
+  clearListeners(teacherUnsubs);
+  teacherUnsubs.push(onSnapshot(query(collection(db,'rounds'),where('ownerUid','==',user.uid)),snap=>{
+    teacherRounds=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.toMillis?.()??0)-(a.createdAt?.toMillis?.()??0));
+    renderRoundList();
+    if(currentRoundId){const item=teacherRounds.find(r=>r.id===currentRoundId);if(item){currentRound=item;renderDetail();}}
+  },e=>toast('Rundenliste: '+message(e))));
+  if(currentRoundId) openRound(currentRoundId);
+}
+function renderRoundList(){
+  const list=$('roundList');list.replaceChildren();$('roundTotal').textContent=teacherRounds.length;
+  if(!teacherRounds.length){list.append(makeElement('p','microcopy','Noch keine Runden vorhanden.'));return;}
+  for(const round of teacherRounds){
+    const b=makeElement('button','round-item'+(round.id===currentRoundId?' active':''));b.type='button';
+    b.append(makeElement('strong','',round.title),makeElement('small','',round.state==='published'?'Ausgelost':'Check-in offen'));
+    b.addEventListener('click',()=>openRound(round.id));list.append(b);
+  }
+}
+async function createRound(){
+  const button=$('createBtn');setBusy(button,true,'Erstelle Runde …');
+  try{
+    if(!isGoogleUser())throw new Error('Nur die Lehrperson darf Runden erstellen.');
+    const result=await call('createRound',{title:$('classTitle').value,students:rowSplit($('studentsInput').value),episodes:rowSplit($('episodesInput').value)});
+    currentRoundId=result.roundId;freshLinks=result.links;
+    // Die persönlichen Links unmittelbar als lokale Datei anbieten.
+    downloadCSV('episoden-zugangslinks.csv',[['Name','Persönlicher Zugangslink'],...freshLinks.map(item=>[item.name,studentUrl(result.roundId,item.token)])]);
+    toast(`Runde erstellt. ${result.links.length} persönliche Links wurden als CSV heruntergeladen.`,8000);
+    openRound(result.roundId,true);
+    $('createBox').classList.add('hidden');
+  }finally{setBusy(button,false);}
+}
+function openRound(roundId,keepLinks=false){
+  currentRoundId=roundId;if(!keepLinks)freshLinks=[];
+  currentRound=teacherRounds.find(r=>r.id===roundId)||null;
+  currentRoster=[];currentResults=[];currentPresence=[];currentView=null;
+  clearListeners(teacherUnsubs);
+  // Die Rundenliste bleibt mit einer eigenen Subscription aktuell.
+  teacherUnsubs.push(onSnapshot(query(collection(db,'rounds'),where('ownerUid','==',user.uid)),snap=>{
+    teacherRounds=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.toMillis?.()??0)-(a.createdAt?.toMillis?.()??0));
+    renderRoundList();
+    const newer=teacherRounds.find(r=>r.id===currentRoundId);
+    if(newer){const oldEpisodes=JSON.stringify(currentRound?.episodes);currentRound=newer;if(oldEpisodes!==JSON.stringify(newer.episodes) && document.activeElement!==$('editEpisodes'))$('editEpisodes').value=newer.episodes.map(e=>e.label).join('\n');renderDetail();}
+  },e=>toast('Rundenübersicht: '+message(e))));
+  const ref=doc(db,'rounds',roundId);
+  teacherUnsubs.push(onSnapshot(collection(ref,'roster'),snapshot=>{
+    currentRoster=snapshot.docs.map(d=>({studentId:d.id,...d.data()})).sort((a,b)=>namesSorter.compare(a.name,b.name));
+    renderRoster();renderDetail();
+  },e=>toast('Klassenliste: '+message(e))));
+  teacherUnsubs.push(onSnapshot(collection(ref,'presence'),snap=>{
+    currentPresence=snap.docs.map(d=>d.data()).sort((a,b)=>namesSorter.compare(a.name,b.name));
+    renderRoster();renderDetail();
+  },e=>toast('Check-ins: '+message(e))));
+  teacherUnsubs.push(onSnapshot(doc(ref,'view','state'),snap=>{currentView=snap.data();renderDetail();},e=>toast('Rundenstatus: '+message(e))));
+  teacherUnsubs.push(onSnapshot(collection(ref,'results'),snap=>{
+    currentResults=snap.docs.map(d=>d.data());renderGroups();
+  },e=>toast('Ergebnisse: '+message(e))));
+  $('editEpisodes').value=(currentRound?.episodes||[]).map(e=>e.label).join('\n');
+  $('linksStatus').textContent=freshLinks.length?`${freshLinks.length} Links wurden erstellt und als CSV heruntergeladen.`:'Nach dem Erstellen wurde eine CSV heruntergeladen. Einzelne verlorene Zugänge kannst du unten neu erzeugen.';
+  show('roundDetail');renderRoundList();renderDetail();
+}
+function renderDetail(){
+  if(!currentRound){return;}
+  const open=currentRound.state==='checkin', closing=false;
+  $('detailTitle').textContent=currentRound.title;
+  $('detailCount').textContent=currentPresence.length;
+  $('detailEpisodeCount').textContent=currentRound.episodes?.length??0;
+  $('detailRosterCount').textContent=currentRoster.length;
+  $('roundStateLabel').textContent=open?'CHECK-IN OFFEN':closing?'AUSLOSUNG WIRD VORBEREITET':'ERGEBNISSE FREIGEGEBEN';
+  if(open||closing){show('openRoundControls');hide('publishedControls');hide('printBtn');$('saveEpisodes').disabled=closing;$('finalizeBtn').disabled=closing;
+    $('finalizeBtn').textContent=closing?'Auslosung läuft. Bei Problemen nach 30 Sekunden erneut versuchen.':'Check-in abschließen und auslosen';
+    if(closing){$('finalizeBtn').disabled=false;$('finalizeBtn').textContent='Auslosung fortsetzen (ggf. nach 30 Sekunden)';}
+  } else {hide('openRoundControls');show('publishedControls');show('printBtn');renderGroups();}
+}
+function renderRoster(){
+  const node=$('rosterList');node.replaceChildren();
+  const present=new Set(currentPresence.map(p=>p.studentId));
+  for(const student of currentRoster){
+    const item=makeElement('div','roster-item');
+    const left=makeElement('div');
+    left.append(makeElement('strong','',student.name),makeElement('div',present.has(student.studentId)?'status-in':'status-out',present.has(student.studentId)?'✓ Eingecheckt':student.revoked?'Zugang gesperrt':'Noch nicht eingecheckt'));
+    const actions=makeElement('div','roster-actions');
+    if(currentRound?.state==='checkin'){
+      if(present.has(student.studentId))actions.append(makeButton('Check-in aufheben',async()=>{
+        if(!confirm(`Check-in von ${student.name} aufheben? Der alte Link wird gesperrt.`))return;
+        const result=await call('revokeCheckIn',{roundId:currentRoundId,studentId:student.studentId});
+        freshLinks=freshLinks.filter(l=>l.studentId!==student.studentId);freshLinks.push(result);
+        downloadCSV('episoden-neuer-zugang.csv',[['Name','Persönlicher Zugangslink'],[result.name,studentUrl(currentRoundId,result.token)]]);
+        toast('Check-in aufgehoben. Der alte Zugang ist gesperrt. Ein neuer Link wurde heruntergeladen.');
+      }));
+      else actions.append(makeButton('Neuen Link erzeugen',async()=>{
+        if(!confirm(`Neuen persönlichen Link für ${student.name} erzeugen? Der vorherige Link wird ungültig.`))return;
+        const result=await call('rotateInvite',{roundId:currentRoundId,studentId:student.studentId});
+        freshLinks=freshLinks.filter(l=>l.studentId!==student.studentId);freshLinks.push(result);
+        $('linksStatus').textContent=`${freshLinks.length} neue Links bereit zum CSV-Download.`;
+        downloadCSV(`episoden-zugang-${student.studentId.slice(0,8)}.csv`,[['Name','Persönlicher Zugangslink'],[result.name,studentUrl(currentRoundId,result.token)]]);
+        toast('Neuer persönlicher Zugangslink heruntergeladen.');
+      }));
+    }
+    item.append(left,actions);node.append(item);
+  }
+}
+async function saveEpisodes(){
+  const lines=rowSplit($('editEpisodes').value);
+  if(!lines.length)throw new Error('Mindestens eine Episode erforderlich.');
+  if(!confirm('Episodenanzahl und Episodennamen für diese noch offene Runde aktualisieren?'))return;
+  await call('changeEpisodes',{roundId:currentRoundId,episodes:lines});toast('Episoden gespeichert.');
+}
+async function deleteRound(){
+  if(!currentRound) return;
+  const typed=prompt(`Runde „${currentRound.title}“ einschließlich Schülernamen und Ergebnissen unwiderruflich löschen? Zum Bestätigen LÖSCHEN eingeben:`);
+  if(typed!=='LÖSCHEN')return;
+  await call('deleteRound',{roundId:currentRoundId});
+  clearListeners(teacherUnsubs);currentRoundId=null;currentRound=null;currentPresence=[];currentRoster=[];currentResults=[];freshLinks=[];
+  hide('roundDetail');show('createBox');toast('Runde und ihre gespeicherten Daten wurden gelöscht.');
+  await startTeacherSession();
+}
+async function finalizeRound(){
+  if(!currentRound||!currentPresence.length){toast('Es muss mindestens eine Person eingecheckt haben.');return;}
+  if(!confirm(`Check-in jetzt verbindlich schließen und ${currentPresence.length} eingecheckte Personen auf ${currentRound.episodes.length} Episoden auslosen? Weitere Check-ins sind danach nicht mehr möglich.`))return;
+  const b=$('finalizeBtn');setBusy(b,true,'Auslosung läuft …');
+  try{const result=await call('finalizeRound',{roundId:currentRoundId});toast(result.alreadyPublished?'Runde ist bereits ausgelost.':`${result.count} Personen wurden erfolgreich zugeteilt.`,8000);}
+  finally{setBusy(b,false);}
+}
+function renderGroups(){
+  const host=$('groupGrid');host.replaceChildren();
+  if(!currentRound||currentRound.state!=='published')return;
+  for(const [i,episode] of currentRound.episodes.entries()){
+    const card=makeElement('section','group-card');card.style.setProperty('--group-color',colors[i%colors.length]);
+    const names=currentResults.filter(x=>x.episodeId===episode.id).map(x=>x.name).sort(namesSorter.compare);
+    card.append(makeElement('h4','',episode.label),makeElement('div','group-count',`${names.length} Personen`));
+    const list=makeElement('ul');names.forEach(name=>list.append(makeElement('li','',name)));card.append(list);host.append(card);
+  }
+}
+
+function setStudentError(text){$('studentError').textContent=text;show('studentError');}
+async function startStudentSession(){
+  if(mode!=='student'||!studentRoundId||!user)return;
+  clearListeners(studentUnsubs);
+  hide('studentError');
+  const ref=doc(db,'rounds',studentRoundId,'authorized',user.uid);
+  try{
+    const member=await getDoc(ref);
+    if(member.exists()){
+      studentIdentity=member.data();joinToken=null;
+      try { history.replaceState(null,'',`${linkBase()}#r=${encodeURIComponent(studentRoundId)}`); } catch { /* iFrame-Sandbox */ }
+      watchStudent();
+    } else {
+      studentIdentity=null;
+      show('studentJoinArea');hide('studentWaiting');hide('studentResult');hide('waitingSidebar');
+      if(!joinToken){setStudentError('Kein gültiger persönlicher Zugang vorhanden. Öffne deinen ursprünglichen Link erneut.');$('joinBtn').disabled=true;}
+      else $('joinBtn').disabled=false;
+    }
+  }catch(e){setStudentError('Dein Zugang konnte nicht geprüft werden: '+message(e));}
+}
+async function checkIn(){
+  if(!user||!studentRoundId||!joinToken){setStudentError('Persönlicher Zugangslink fehlt.');return;}
+  if(isGoogleUser()){setStudentError('Bitte den Schülerlink in einem privaten Browserfenster öffnen.');return;}
+  const b=$('joinBtn');setBusy(b,true,'Check-in wird gespeichert …');
+  try{
+    const result=await call('checkIn',{roundId:studentRoundId,token:joinToken});
+    studentIdentity={studentId:result.studentId,name:result.name};joinToken=null;
+    try { history.replaceState(null,'',`${linkBase()}#r=${encodeURIComponent(studentRoundId)}`); } catch { /* iFrame-Sandbox */ }
+    hide('studentError');watchStudent();
+  } catch(e){setStudentError(message(e));} finally{setBusy(b,false);}
+}
+function watchStudent(){
+  clearListeners(studentUnsubs);
+  if(!studentIdentity)return;
+  hide('studentJoinArea');show('studentWaiting');show('waitingSidebar');hide('studentResult');
+  $('selfName').textContent=studentIdentity.name;
+  const roundRef=doc(db,'rounds',studentRoundId);
+  studentUnsubs.push(onSnapshot(doc(roundRef,'view','state'),snap=>{
+    if(!snap.exists()){setStudentError('Rundenstatus nicht verfügbar.');return;}
+    const data=snap.data();
+    $('studentEyebrow').textContent=data.title||'Deine Gruppeneinteilung';
+    wheelEpisodes=data.episodes||[];
+    if(data.state==='published'){hide('studentWaiting');hide('waitingSidebar');show('studentResult');$('studentHeading').textContent='Deine Auslosung';$('studentSub').textContent='Die Lehrperson hat den Check-in abgeschlossen.';subscribeResult();}
+    else {show('studentWaiting');show('waitingSidebar');hide('studentResult');$('studentHeading').textContent=data.state==='closing'?'Die Auslosung wird vorbereitet …':'Du bist dabei!';$('studentSub').textContent='Alle eingecheckten Personen warten gemeinsam auf die Freigabe.';}
+  },e=>setStudentError('Status: '+message(e))));
+  studentUnsubs.push(onSnapshot(collection(roundRef,'presence'),snap=>{
+    const people=snap.docs.map(d=>d.data()).sort((a,b)=>namesSorter.compare(a.name,b.name));
+    $('studentCount').textContent=people.length;
+    const names=$('studentNames');names.replaceChildren();people.forEach(p=>names.append(makeElement('li','',p.name)));
+  },e=>setStudentError('Teilnehmerliste: '+message(e))));
+}
+let resultUnsub=null;
+function subscribeResult(){
+  if(resultUnsub)return;
+  resultUnsub=onSnapshot(doc(db,'rounds',studentRoundId,'results',user.uid),snap=>{
+    if(!snap.exists())return;
+    const result=snap.data();
+    if(result.authUid!==user.uid){setStudentError('Die Zuteilung stimmt nicht mit deiner Anmeldung überein.');return;}
+    const idx=wheelEpisodes.findIndex(e=>e.id===result.episodeId);
+    if(idx<0){setStudentError('Die freigegebene Episode ist nicht in der Radliste enthalten.');return;}
+    studentEpisode=result;
+    show('studentResult');renderWheel(wheelEpisodes,currentRotation);
+    if(!spinning){startWheel(idx,result);}
+  },e=>setStudentError('Zuteilung: '+message(e)));
+  studentUnsubs.push(()=>{resultUnsub?.();resultUnsub=null;});
+}
+function renderWheel(episodes,rotation){
+  const canvas=$('wheel'),ctx=canvas.getContext('2d');
+  const size=canvas.width,center=size/2,r=size*.47;
+  ctx.clearRect(0,0,size,size);
+  if(!episodes.length)return;
+  const arc=2*Math.PI/episodes.length;
+  ctx.save();ctx.translate(center,center);ctx.rotate(rotation);
+  episodes.forEach((episode,i)=>{
+    const start=-Math.PI/2+i*arc,end=start+arc;
+    ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,r,start,end);ctx.closePath();ctx.fillStyle=colors[i%colors.length];ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.stroke();
+    ctx.save();ctx.rotate(start+arc/2);ctx.translate(r*.68,0);
+    const font=Math.max(15,Math.min(28,Math.floor(330/(episodes.length+3))));
+    ctx.font=`800 ${font}px system-ui,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#fff';
+    let label=episode.label;
+    if(episodes.length>12 || label.length>18)label=`${i+1}`;
+    ctx.rotate(Math.PI/2);
+    ctx.fillText(label,0,0,r*.52);
+    ctx.restore();
+  });
+  ctx.restore();
+  ctx.beginPath();ctx.arc(center,center,r*.14,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.lineWidth=5;ctx.strokeStyle='#d1dbd8';ctx.stroke();
+  ctx.fillStyle='#1b6670';ctx.font='bold 55px system-ui';ctx.textBaseline='middle';ctx.textAlign='center';ctx.fillText('✳',center,center+2);
+}
+function startWheel(index,result){
+  spinning=true;const key=`episoden-spun:${studentRoundId}:${studentIdentity.studentId}`;
+  const arc=2*Math.PI/wheelEpisodes.length;
+  const desired=-(index+.5)*arc;
+  const diff=(desired-(currentRotation%(2*Math.PI))+Math.PI*6)%(2*Math.PI);
+  const start=currentRotation, target=start+Math.PI*2*5+diff;
+  let already=false;try { already=sessionStorage.getItem(key)==='1'; } catch { /* iFrame-Privatsphaere */ }
+  const duration=window.matchMedia('(prefers-reduced-motion: reduce)').matches||already?0:3200;
+  $('spinningLabel').textContent=duration?'Das Glücksrad dreht …':'Auslosung abgeschlossen';
+  hide('myEpisode');
+  function finish(){currentRotation=target;renderWheel(wheelEpisodes,currentRotation);$('episodeName').textContent=result.episodeLabel;$('resultOwner').textContent=`Für ${studentIdentity.name}`;show('myEpisode');$('spinningLabel').textContent='Deine Episode wurde verbindlich zugeteilt.';try { sessionStorage.setItem(key,'1'); } catch { /* Browser blockiert Storage */ } spinning=false;}
+  if(!duration){finish();return;}
+  const started=performance.now(),animationId=++activeAnimation;
+  function frame(now){if(animationId!==activeAnimation)return;const p=Math.min((now-started)/duration,1),easing=1-Math.pow(1-p,4);currentRotation=start+(target-start)*easing;renderWheel(wheelEpisodes,currentRotation);if(p<1)requestAnimationFrame(frame);else finish();}
+  requestAnimationFrame(frame);
+}
+setup();

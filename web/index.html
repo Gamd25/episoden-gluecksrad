@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#152938">
+  <meta name="description" content="Gemeinsamer Check-in und faire, synchronisierte Episodenzuteilung für Schulklassen.">
+  <title>Episoden-Glücksrad</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand"><span class="brand-icon">✳</span><span>EPISODEN<span class="brand-light">·RAD</span></span></div>
+    <div class="header-right"><span id="connection" class="connection" aria-live="polite">Verbinde …</span><button id="teacherNav" class="btn text-button" type="button">Lehrerbereich</button></div>
+  </header>
+  <main class="main">
+    <section id="landing" class="landing card">
+      <div class="eyebrow">Gemeinsam · zufällig · gerecht</div>
+      <h1>Ein Klick.<br><em>Viele Episoden.</em></h1>
+      <p>Alle Schülerinnen und Schüler checken ein. Erst wenn die Lehrperson die Runde schließt, werden die Episoden fair ausgelost.</p>
+      <div class="notice">Für Schülerinnen und Schüler: Öffne deinen <strong>persönlichen Zugangslink</strong>, den du von deiner Lehrperson erhalten hast.</div>
+      <button id="landingTeacher" class="btn primary" type="button">Zum Lehrerbereich <span aria-hidden="true">→</span></button>
+    </section>
+
+    <section id="studentApp" class="hidden" aria-label="Teilnahme">
+      <div class="student-layout">
+        <div class="card student-main">
+          <div class="eyebrow" id="studentEyebrow">Deine Teilnahme</div>
+          <h1 id="studentHeading">Bereit zum Check-in?</h1>
+          <p id="studentSub" class="muted">Ein Klick genügt. Danach wartest du gemeinsam mit allen anderen auf die Auslosung.</p>
+          <div id="studentJoinArea" class="join-area">
+            <div class="join-disc" aria-hidden="true"><span>✳</span></div>
+            <button id="joinBtn" type="button" class="btn primary giant" disabled>Ich bin dabei! <span aria-hidden="true">✓</span></button>
+            <div class="microcopy">Jede Person kann sich nur einmal anmelden.</div>
+          </div>
+          <div id="studentWaiting" class="hidden">
+            <div class="waiting-check" aria-hidden="true">✓</div>
+            <div class="waiting-label">Erfolgreich eingecheckt</div>
+            <div class="person-display" id="selfName"></div>
+            <p class="muted centered">Bitte warten. Die Lehrperson beendet den Check-in, sobald alle anwesenden Personen angemeldet sind.</p>
+          </div>
+          <div id="studentResult" class="hidden">
+            <div class="wheel-area"><div class="wheel-pointer" aria-hidden="true"></div><canvas id="wheel" width="760" height="760" role="img" aria-label="Episoden-Glücksrad"></canvas></div>
+            <div id="spinningLabel" class="spinning-label" aria-live="polite">Die Auslosung wurde freigegeben.</div>
+            <div id="myEpisode" class="result-box hidden" aria-live="polite"><span>DEINE EPISODE</span><strong id="episodeName"></strong><small id="resultOwner"></small></div>
+          </div>
+          <div id="studentError" class="alert error hidden" role="alert"></div>
+        </div>
+        <aside id="waitingSidebar" class="card student-side hidden">
+          <div class="side-title"><div><div class="eyebrow">LIVE-CHECK-IN</div><h2>Wir sind dabei</h2></div><span class="live-dot" aria-hidden="true"></span></div>
+          <div class="count"><strong id="studentCount">0</strong><span>Personen eingecheckt</span></div>
+          <ol id="studentNames" class="names-list"></ol>
+          <p class="microcopy">Die Reihenfolge des Check-ins beeinflusst die Auslosung nicht.</p>
+        </aside>
+      </div>
+    </section>
+
+    <section id="teacherAuth" class="card auth-card hidden">
+      <div class="eyebrow">VERWALTUNG</div>
+      <h1>Lehrerbereich</h1>
+      <p class="muted">Hier erstellst du Gruppeneinteilungen, verteilst persönliche Links und gibst die Ergebnisse frei.</p>
+      <button id="loginBtn" type="button" class="btn primary">Mit Google anmelden</button>
+      <p class="microcopy">Der Lehrerbereich sollte als eigener Browser-Tab geöffnet werden, nicht innerhalb eines Moodle-iFrames.</p>
+    </section>
+
+    <section id="teacherApp" class="hidden" aria-label="Lehrerbereich">
+      <div class="teacher-top"><div><div class="eyebrow">VERWALTUNG</div><h1>Meine Auslosungen</h1></div><div class="teacher-head-buttons"><button id="newRoundBtn" class="btn primary" type="button">+ Neue Runde</button><button id="logoutBtn" class="btn secondary" type="button">Abmelden</button></div></div>
+      <div class="teacher-layout">
+        <aside class="card teacher-left">
+          <div class="panel-heading"><h2>Runden</h2><span id="roundTotal" class="chip">0</span></div>
+          <div id="roundList" class="round-list" aria-label="Eigene Runden"></div>
+        </aside>
+        <div class="teacher-right">
+          <section class="card" id="createBox">
+            <div class="eyebrow">NEUE EINTEILUNG</div>
+            <h2>Runde erstellen</h2>
+            <form id="createForm">
+              <label for="classTitle">Bezeichnung der Runde</label>
+              <input id="classTitle" type="text" maxlength="100" placeholder="z. B. DIG 2A – Gruppenarbeit" required>
+              <div class="form-columns">
+                <div><label for="studentsInput">Schülernamen <span>ein Name pro Zeile</span></label><textarea id="studentsInput" rows="8" required placeholder="Anna Muster\nLena Beispiel\nSara Demo"></textarea><small id="studentInputCount" class="microcopy">0 Namen</small></div>
+                <div><label for="episodesInput">Episoden <span>ein Titel pro Zeile</span></label><textarea id="episodesInput" rows="8" required>Episode 1\nEpisode 2\nEpisode 3\nEpisode 4\nEpisode 5</textarea><small id="episodeInputCount" class="microcopy">5 Episoden</small></div>
+              </div>
+              <p class="microcopy">Nur erfolgreich eingecheckte Personen nehmen teil. Es gibt keine erforderliche Mindestzahl entsprechend der Klassenliste.</p>
+              <button class="btn primary" id="createBtn" type="submit">Neue Runde erstellen <span aria-hidden="true">→</span></button>
+            </form>
+          </section>
+          <section class="card hidden" id="roundDetail">
+            <div class="detail-head"><div><div id="roundStateLabel" class="eyebrow">CHECK-IN OFFEN</div><h2 id="detailTitle"></h2></div><div class="teacher-head-buttons"><button id="printBtn" type="button" class="btn secondary hidden">Drucken</button><button id="deleteRoundBtn" type="button" class="btn secondary">Runde löschen</button></div></div>
+            <div class="stat-grid"><div class="stat"><strong id="detailCount">0</strong><span>eingecheckt</span></div><div class="stat"><strong id="detailEpisodeCount">0</strong><span>Episoden</span></div><div class="stat"><strong id="detailRosterCount">0</strong><span>Zugangscodes</span></div></div>
+            <div id="openRoundControls">
+              <h3>Episoden bearbeiten</h3>
+              <p class="microcopy">Bis zur Auslosung kannst du Episoden hinzufügen, entfernen oder umbenennen.</p>
+              <textarea id="editEpisodes" rows="5"></textarea>
+              <button type="button" id="saveEpisodes" class="btn secondary">Episoden speichern</button>
+              <div class="divider"></div>
+              <h3>Check-in-Übersicht</h3>
+              <p class="microcopy">Die Liste zeigt alle eingetragenen Schülerinnen und Schüler und markiert, wer schon eingecheckt hat. Die Teilnehmerzahl für die Auslosung ist ausschließlich die Check-in-Anzahl.</p>
+              <div id="rosterList" class="roster-list"></div>
+              <div class="divider"></div>
+              <h3>Persönliche Zugangslinks</h3>
+              <p class="microcopy">Die Links werden nur bei Erstellung oder Erneuerung ausgegeben. Bewahre die heruntergeladene CSV vertraulich auf. Ein neuer Link macht den alten ungültig.</p>
+              <div id="linksStatus" class="microcopy">Noch keine neu erzeugten Links in dieser Ansicht.</div>
+              <button id="downloadLinks" type="button" class="btn secondary">Neue Zugangslinks als CSV</button>
+              <div class="divider"></div>
+              <div class="closure-box"><h3>Check-in abschließen</h3><p>Prüfe die eingegangenen Namen. Erst durch deinen Abschluss werden alle gültig eingecheckten Personen zufällig eingeteilt.</p><button id="finalizeBtn" type="button" class="btn primary danger-action">Check-in abschließen und auslosen</button></div>
+            </div>
+            <div id="publishedControls" class="hidden"><h3>Auslosung abgeschlossen</h3><p class="muted">Die Teilnehmerinnen und Teilnehmer erhalten ihre individuelle Episode. Die Gruppengrößen unterscheiden sich höchstens um eine Person.</p><div id="groupGrid" class="group-grid"></div><button id="exportResults" type="button" class="btn primary">Ergebnisse als CSV exportieren</button></div>
+          </section>
+        </div>
+      </div>
+    </section>
+    <div id="globalStatus" class="toast hidden" role="status" aria-live="polite"></div>
+  </main>
+  <footer class="footer">Episoden-Glücksrad · Getrennt vom ursprünglichen Gefühlskarten-Rad · Personenbezogene Zugänge vertraulich behandeln</footer>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
