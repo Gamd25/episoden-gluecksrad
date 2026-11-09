@@ -1,0 +1,107 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signed() { return request.auth != null; }
+    function teacher() { return signed() && request.auth.token.firebase.sign_in_provider == 'google.com'; }
+    function roundPath(rid) { return /databases/$(database)/documents/rounds/$(rid); }
+    function gatePath(rid) { return /databases/$(database)/documents/rounds/$(rid)/checkinGate/status; }
+    function rosterPath(rid, token) { return /databases/$(database)/documents/rounds/$(rid)/roster/$(token); }
+    function authPath(rid, uid) { return /databases/$(database)/documents/rounds/$(rid)/authorized/$(uid); }
+    function presencePath(rid, uid) { return /databases/$(database)/documents/rounds/$(rid)/presence/$(uid); }
+    function owner(rid) { return teacher() && get(roundPath(rid)).data.ownerUid == request.auth.uid; }
+    function ownerAfter(rid) { return teacher() && getAfter(roundPath(rid)).data.ownerUid == request.auth.uid; }
+    function member(rid) { return signed() && exists(authPath(rid, request.auth.uid)); }
+    function openForCheckin(rid) { return get(gatePath(rid)).data.state == 'checkin'; }
+    function student() { return signed() && request.auth.token.firebase.sign_in_provider == 'anonymous'; }
+
+    match /rounds/{rid} {
+      allow get, list: if signed() && resource.data.ownerUid == request.auth.uid;
+      allow create: if teacher() &&
+        request.resource.data.ownerUid == request.auth.uid &&
+        request.resource.data.state == 'checkin' &&
+        request.resource.data.keys().hasOnly(['ownerUid','title','state','episodes','rosterIds','createdAt']) &&
+        request.resource.data.rosterIds is list &&
+        request.resource.data.rosterIds.size() >= 1 &&
+        request.resource.data.rosterIds.size() <= 160 &&
+        request.resource.data.episodes is list &&
+        request.resource.data.episodes.size() >= 1 &&
+        request.resource.data.episodes.size() <= 30;
+      allow update: if teacher() && resource.data.ownerUid == request.auth.uid &&
+        request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if teacher() && resource.data.ownerUid == request.auth.uid;
+
+      // Only the status (not the roster IDs) is available before check-in.
+      match /checkinGate/{id} {
+        allow get: if signed() && id == 'status';
+        allow list: if false;
+        allow create: if ownerAfter(rid);
+        allow update, delete: if owner(rid);
+      }
+      // Participant-visible view: no episode names until the draw is published.
+      match /view/{id} {
+        allow get: if id == 'state' && (owner(rid) || member(rid));
+        allow list: if false;
+        allow create: if ownerAfter(rid);
+        allow update, delete: if owner(rid);
+      }
+      match /roster/{invite} {
+        // The unguessable 256-bit document ID IS the bearer invitation.
+        // Never permit listing the unclaimed invitations.
+        allow get: if owner(rid) || (student() && invite.matches('^[0-9a-f]{64}$'));
+        allow list: if owner(rid);
+        allow create: if ownerAfter(rid);
+        allow delete: if owner(rid);
+        allow update: if owner(rid) || (
+          student() && openForCheckin(rid) &&
+          resource.data.claimedUid == null &&
+          request.resource.data.claimedUid == request.auth.uid &&
+          request.resource.data.checkedInAt == request.time &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['claimedUid','checkedInAt']) &&
+          !exists(authPath(rid, request.auth.uid)) &&
+          getAfter(authPath(rid, request.auth.uid)).data.studentId == invite &&
+          getAfter(authPath(rid, request.auth.uid)).data.name == resource.data.name &&
+          getAfter(presencePath(rid, request.auth.uid)).data.studentId == invite &&
+          getAfter(presencePath(rid, request.auth.uid)).data.name == resource.data.name
+        );
+      }
+      match /authorized/{uid} {
+        allow get: if signed() && (request.auth.uid == uid || owner(rid));
+        allow list: if owner(rid);
+        allow create: if student() && uid == request.auth.uid && openForCheckin(rid) &&
+          request.resource.data.keys().hasAll(['studentId','name']) &&
+          request.resource.data.keys().hasOnly(['studentId','name']) &&
+          request.resource.data.studentId is string &&
+          request.resource.data.studentId.matches('^[0-9a-f]{64}$') &&
+          getAfter(rosterPath(rid, request.resource.data.studentId)).data.claimedUid == uid &&
+          getAfter(rosterPath(rid, request.resource.data.studentId)).data.name == request.resource.data.name &&
+          getAfter(presencePath(rid, uid)).data.studentId == request.resource.data.studentId;
+        allow update: if false;
+        allow delete: if owner(rid);
+      }
+      match /presence/{uid} {
+        allow get, list: if owner(rid) || member(rid);
+        allow create: if student() && uid == request.auth.uid && openForCheckin(rid) &&
+          request.resource.data.keys().hasAll(['studentId','name','authUid','checkedInAt']) &&
+          request.resource.data.keys().hasOnly(['studentId','name','authUid','checkedInAt']) &&
+          request.resource.data.authUid == uid &&
+          request.resource.data.checkedInAt == request.time &&
+          request.resource.data.studentId is string &&
+          request.resource.data.studentId.matches('^[0-9a-f]{64}$') &&
+          getAfter(rosterPath(rid, request.resource.data.studentId)).data.claimedUid == uid &&
+          getAfter(rosterPath(rid, request.resource.data.studentId)).data.name == request.resource.data.name &&
+          getAfter(authPath(rid, uid)).data.studentId == request.resource.data.studentId;
+        allow update: if false;
+        allow delete: if owner(rid);
+      }
+      match /results/{uid} {
+        allow get: if owner(rid) || (
+          signed() && request.auth.uid == uid && member(rid) &&
+          get(gatePath(rid)).data.state == 'published'
+        );
+        allow list: if owner(rid);
+        allow create: if ownerAfter(rid);
+        allow update, delete: if owner(rid);
+      }
+    }
+  }
+}
