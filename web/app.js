@@ -1,8 +1,10 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js';
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInAnonymously, signOut } from 'https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js';
-import { getFirestore, collection, doc, getDoc, onSnapshot, query, where } from 'https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js';
+import { getFirestore, collection, doc, getDocFromServer, onSnapshot, query, where } from 'https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js';
 import { createRound as createSparkRound, checkIn as sparkCheckIn, changeEpisodes as sparkChangeEpisodes, revokeCheckIn as sparkRevoke, finalizeRound as sparkFinalize, deleteRound as sparkDelete } from './shared-backend.js';
 import { firebaseConfig } from './config.js';
+import { resolveStoredAssignment, visitedWheelKey } from './episode-result.js';
+import { createMembershipWitness } from './checkin-status.js';
 
 const $ = id => document.getElementById(id);
 const hide = id => $(id).classList.add('hidden');
@@ -14,7 +16,11 @@ let app,auth,db;
 let mode = 'landing', user=null, currentRoundId=null, studentRoundId=null, studentIdentity=null;
 let teacherUnsubs=[], studentUnsubs=[], currentRound=null, currentResults=[], currentPresence=[], currentView=null;
 let teacherRounds=[], studentEpisode=null, spinning=false, currentRotation=0, activeAnimation=0, wheelEpisodes=[];
+let shownAssignment=null;
+let studentWatchSerial=0; // Ungueltige alte Listener- und Serverantworten nicht auf aktuelle Anmeldungen anwenden.
 let toastTimer;
+const deletingRoundIds = new Set();
+const BUILD_VERSION = 'v6';
 const teacherProvider = new GoogleAuthProvider();
 teacherProvider.setCustomParameters({prompt:'select_account'});
 function toast(message,ms=5000){ const e=$('globalStatus');e.textContent=message;show('globalStatus');clearTimeout(toastTimer);toastTimer=setTimeout(()=>hide('globalStatus'),ms); }
@@ -50,6 +56,8 @@ function makeElement(tag,className,text){const e=document.createElement(tag);if(
 function makeButton(label,fn){const b=makeElement('button','btn-mini',label);b.type='button';b.addEventListener('click',safeRun(label,fn));return b;}
 
 function setup() {
+  const buildBadge=$('buildBadge')||document.querySelector('.build-version');
+  if(buildBadge)buildBadge.textContent=BUILD_VERSION+' · JS geladen';
   $('teacherNav').addEventListener('click',()=>openTeacher());
   $('landingTeacher').addEventListener('click',()=>openTeacher());
   $('loginBtn').addEventListener('click',safeRun('Anmeldung',async()=>{
@@ -98,7 +106,7 @@ function setup() {
   },e=>{console.error(e);$('connection').textContent='Verbindungsfehler';toast(message(e));});
 }
 function isGoogleUser(){return Boolean(user?.providerData?.some(p=>p.providerId==='google.com'));}
-function openTeacher(){clearListeners(studentUnsubs);studentIdentity=null;mode='teacherAuth';if(!configured()){setScreen('teacherAuth');return;}if(isGoogleUser()) startTeacherSession().catch(e=>toast(message(e)));else setScreen('teacherAuth');}
+function openTeacher(){++studentWatchSerial;clearListeners(studentUnsubs);studentIdentity=null;mode='teacherAuth';if(!configured()){setScreen('teacherAuth');return;}if(isGoogleUser()) startTeacherSession().catch(e=>toast(message(e)));else setScreen('teacherAuth');}
 
 async function startTeacherSession(){
   if(!isGoogleUser())return;
@@ -115,9 +123,19 @@ function renderRoundList(){
   const list=$('roundList');list.replaceChildren();$('roundTotal').textContent=teacherRounds.length;
   if(!teacherRounds.length){list.append(makeElement('p','microcopy','Noch keine gemeinsamen Klassenrunden vorhanden.'));return;}
   for(const round of teacherRounds){
+    // Kein verschachtelter Button: Auswahl und Löschen bleiben getrennte Aktionen.
+    const row=makeElement('div','round-row');
     const b=makeElement('button','round-item'+(round.id===currentRoundId?' active':''));b.type='button';
-    b.append(makeElement('strong','',round.title),makeElement('small','',round.state==='published'?'Ausgelost':'Check-in offen'));
-    b.addEventListener('click',()=>openRound(round.id));list.append(b);
+    const state=round.state==='published'?'Ausgelost':round.state==='deleting'?'Löschung noch offen':round.state==='closing'?'Auslosung läuft':'Check-in offen';
+    b.append(makeElement('strong','',round.title),makeElement('small','',state));
+    b.addEventListener('click',()=>openRound(round.id));
+    const remove=makeElement('button','round-delete',round.state==='deleting'?'Fortsetzen':'Löschen');remove.type='button';
+    remove.setAttribute('aria-label',`Runde ${round.title} löschen`);
+    remove.disabled=deletingRoundIds.has(round.id);
+    remove.addEventListener('click',safeRun('Runde löschen',async()=>{
+      await deleteRoundById(round.id,round.title);
+    }));
+    row.append(b,remove);list.append(row);
   }
 }
 async function createRound(){
@@ -164,7 +182,12 @@ function renderDetail(){
   $('detailCount').textContent=currentPresence.length;
   $('detailEpisodeCount').textContent=currentRound.episodes?.length??0;
   $('detailRosterCount').textContent='1';
-  $('roundStateLabel').textContent=open?'CHECK-IN OFFEN':closing?'AUSLOSUNG WIRD VORBEREITET':'ERGEBNISSE FREIGEGEBEN';
+  $('roundStateLabel').textContent=currentRound.state==='deleting'?'LÖSCHUNG UNVOLLSTÄNDIG':open?'CHECK-IN OFFEN':closing?'AUSLOSUNG WIRD VORBEREITET':'ERGEBNISSE FREIGEGEBEN';
+  if(currentRound.state==='deleting'){
+    hide('openRoundControls');hide('publishedControls');hide('printBtn');
+    $('deleteRoundBtn').textContent='Löschung fortsetzen';return;
+  }
+  $('deleteRoundBtn').textContent='Runde löschen';
   if(open||closing){show('openRoundControls');hide('publishedControls');hide('printBtn');$('saveEpisodes').disabled=closing;$('finalizeBtn').disabled=closing;
     $('finalizeBtn').textContent=closing?'Auslosung läuft. Bei Problemen nach 30 Sekunden erneut versuchen.':'Check-in abschließen und auslosen';
     if(closing){$('finalizeBtn').disabled=false;$('finalizeBtn').textContent='Auslosung fortsetzen (ggf. nach 30 Sekunden)';}
@@ -194,13 +217,35 @@ async function saveEpisodes(){
   await call('changeEpisodes',{roundId:currentRoundId,episodes:lines});toast('Episoden gespeichert.');
 }
 async function deleteRound(){
-  if(!currentRound) return;
-  const typed=prompt(`Runde „${currentRound.title}“ einschließlich Schülernamen und Ergebnissen unwiderruflich löschen? Zum Bestätigen LÖSCHEN eingeben:`);
+  if(!currentRoundId || !currentRound) return;
+  await deleteRoundById(currentRoundId,currentRound.title);
+}
+async function deleteRoundById(roundId,title){
+  // Das Ziel vor jeder Rückfrage fixieren; eine parallele Listenauswahl darf
+  // nicht versehentlich die falsche Runde löschen.
+  const round=teacherRounds.find(r=>r.id===roundId);
+  if(!round || round.title!==title || !isGoogleUser()){
+    throw new Error('Runde nicht gefunden oder kein berechtigter Lehrerzugang. Bitte die Liste neu laden.');
+  }
+  if(deletingRoundIds.has(roundId))return;
+  const typed=prompt(`Runde „${title}“ samt Check-ins und Episodenergebnissen endgültig löschen?\n\nGib exakt LÖSCHEN ein:`);
   if(typed!=='LÖSCHEN')return;
-  await call('deleteRound',{roundId:currentRoundId});
-  clearListeners(teacherUnsubs);currentRoundId=null;currentRound=null;currentPresence=[];currentResults=[];
-  hide('roundDetail');show('createBox');toast('Runde und ihre gespeicherten Daten wurden gelöscht.');
-  await startTeacherSession();
+  deletingRoundIds.add(roundId);renderRoundList();
+  try{
+    await call('deleteRound',{roundId});
+    // Erst nach bestätigter Datenbank-Löschung die UI ändern.
+    if(currentRoundId===roundId){
+      clearListeners(teacherUnsubs);currentRoundId=null;currentRound=null;
+      currentPresence=[];currentResults=[];currentView=null;
+      hide('roundDetail');show('createBox');
+      await startTeacherSession();
+    }
+    // Keine anderen geöffneten Runden antasten.
+    toast(`Runde „${title}“ wurde gelöscht.`,6500);
+  }catch(e){
+    toast(`Löschen nicht abgeschlossen: ${message(e)}. Bitte dieselbe Runde später erneut löschen.`,11000);
+    throw e;
+  }finally{deletingRoundIds.delete(roundId);renderRoundList();}
 }
 async function finalizeRound(){
   if(!currentRound||(currentRound.state==='checkin'&&!currentPresence.length)){toast('Es muss mindestens eine Person eingecheckt haben.');return;}
@@ -223,13 +268,14 @@ function renderGroups(){
 function setStudentError(text){$('studentError').textContent=text;show('studentError');}
 async function startStudentSession(){
   if(mode!=='student'||!studentRoundId||!user)return;
+  ++studentWatchSerial;
   clearListeners(studentUnsubs);
   hide('studentError');
   const ref=doc(db,'sharedRounds',studentRoundId,'authorized',user.uid);
   try{
-    const member=await getDoc(ref);
+    const member=await getDocFromServer(ref);
     if(member.exists()){
-      studentIdentity=member.data();watchStudent();
+      studentIdentity=member.data();watchStudent({alreadyVerified:true});
     } else {
       studentIdentity=null;
       show('studentJoinArea');hide('studentWaiting');hide('studentResult');hide('waitingSidebar');
@@ -245,21 +291,66 @@ async function checkIn(){
     const result=await call('checkIn',{roundId:studentRoundId,name:$('studentNameInput').value});
     studentIdentity={studentId:result.studentId,name:result.name};
     try { history.replaceState(null,'',`${linkBase()}#r=${encodeURIComponent(studentRoundId)}`); } catch { /* iFrame-Sandbox */ }
-    hide('studentError');watchStudent();
+    hide('studentError');watchStudent({alreadyVerified:false});
   } catch(e){setStudentError(e?.code==='permission-denied'?'Check-in abgelehnt. Möglicherweise ist der Name schon belegt, die Runde geschlossen oder die neuen Firestore-Regeln fehlen. Bitte Lehrperson informieren.':message(e));} finally{setBusy(b,false);}
 }
-function watchStudent(){
+function watchStudent({alreadyVerified=false}={}){
   clearListeners(studentUnsubs);
   if(!studentIdentity)return;
+  // Alte Zeichnungen/Ergebnisse dürfen nicht in eine neue Sitzung hineinragen.
+  spinning=false;activeAnimation++;shownAssignment=null;studentEpisode=null;
+  hide('myEpisode');
+  const watchId=++studentWatchSerial;
+  const watchedUid=user.uid;
+  const watchedStudentId=studentIdentity.studentId;
+  let checkingRemoval=false;
+  const witness=createMembershipWitness({alreadyVerified});
   hide('studentJoinArea');show('studentWaiting');show('waitingSidebar');hide('studentResult');
   $('selfName').textContent=studentIdentity.name;
+  $('studentHeading').textContent='Du bist dabei!';
+  $('studentSub').textContent='Dein Check-in wurde übernommen. Warte auf den Abschluss durch die Lehrperson.';
   const roundRef=doc(db,'sharedRounds',studentRoundId);
-  studentUnsubs.push(onSnapshot(doc(roundRef,'authorized',user.uid),snap=>{
-    if(!snap.exists() && studentIdentity){
-      clearListeners(studentUnsubs);studentIdentity=null;spinning=false;activeAnimation++;resultUnsub=null;
-      hide('studentWaiting');hide('studentResult');hide('waitingSidebar');show('studentJoinArea');$('joinBtn').disabled=false;
-      setStudentError('Dein Check-in wurde von der Lehrperson entfernt. Du kannst dich mit deinem Namen erneut anmelden.');
+  const authRef=doc(roundRef,'authorized',watchedUid);
+  // Nur ein zuvor vom Server bestaetigter Check-in darf nach einer weiteren
+  // unabhaengigen Serverkontrolle als nicht mehr vorhanden gelten.
+  // Ein initiales 'nicht vorhanden' nach erfolgreicher Transaktion oder aus
+  // dem Offline-Cache ist KEIN Beleg fuer das Entfernen durch die Lehrperson.
+  studentUnsubs.push(onSnapshot(authRef,async snap=>{
+    if(watchId!==studentWatchSerial || !studentIdentity || user?.uid!==watchedUid || studentIdentity.studentId!==watchedStudentId)return;
+    if(snap.exists() && snap.data().studentId!==watchedStudentId){
+      setStudentError('Dein Anmeldestatus passt nicht zu deinem Check-in. Bitte die Lehrperson informieren.');return;
     }
+    const observation=witness.observe({exists:snap.exists(),fromCache:snap.metadata.fromCache});
+    if(observation==='present'){
+      hide('studentError');return;
+    }
+    if(observation!=='verify-absence' || checkingRemoval)return;
+    checkingRemoval=true;
+    try{
+      const verified=await getDocFromServer(authRef);
+      if(watchId!==studentWatchSerial || !studentIdentity || user?.uid!==watchedUid || studentIdentity.studentId!==watchedStudentId)return;
+      if(verified.exists()){
+        if(verified.data().studentId!==watchedStudentId)setStudentError('Dein Anmeldestatus passt nicht zu deinem Check-in. Bitte die Lehrperson informieren.');
+        else {witness.serverConfirmed();hide('studentError');}
+        return;
+      }
+      // Der erste fehlende Server-Lesewert reicht noch nicht: nochmals pruefen.
+      const secondCheck=await getDocFromServer(authRef);
+      if(watchId!==studentWatchSerial || !studentIdentity || user?.uid!==watchedUid || studentIdentity.studentId!==watchedStudentId)return;
+      if(secondCheck.exists()){
+        if(secondCheck.data().studentId!==watchedStudentId)setStudentError('Dein Anmeldestatus passt nicht zu deinem Check-in. Bitte die Lehrperson informieren.');
+        else {witness.serverConfirmed();hide('studentError');}
+        return;
+      }
+      ++studentWatchSerial;
+      clearListeners(studentUnsubs);studentIdentity=null;spinning=false;activeAnimation++;resultUnsub=null;shownAssignment=null;studentEpisode=null;hide('myEpisode');
+      hide('studentWaiting');hide('studentResult');hide('waitingSidebar');show('studentJoinArea');$('joinBtn').disabled=false;
+      $('studentHeading').textContent='Check-in nicht mehr aktiv';
+      $('studentSub').textContent='Die Anmeldung ist nicht mehr in Firebase gespeichert.';
+      setStudentError('Dein Check-in ist nicht mehr aktiv. Bitte informiere die Lehrperson oder melde dich erneut an, solange die Runde offen ist.');
+    }catch(e){
+      if(watchId===studentWatchSerial)setStudentError('Dein Anmeldestatus konnte gerade nicht geprüft werden: '+message(e));
+    }finally{checkingRemoval=false;}
   },e=>setStudentError('Anmeldestatus: '+message(e))));
   studentUnsubs.push(onSnapshot(doc(roundRef,'view','state'),snap=>{
     if(!snap.exists()){setStudentError('Rundenstatus nicht verfügbar.');return;}
@@ -267,7 +358,7 @@ function watchStudent(){
     $('studentEyebrow').textContent=data.title||'Deine Gruppeneinteilung';
     wheelEpisodes=data.episodes||[];
     if(data.state==='published'){hide('studentWaiting');hide('waitingSidebar');show('studentResult');$('studentHeading').textContent='Deine Auslosung';$('studentSub').textContent='Die Lehrperson hat den Check-in abgeschlossen.';subscribeResult();}
-    else {show('studentWaiting');show('waitingSidebar');hide('studentResult');$('studentHeading').textContent=data.state==='closing'?'Die Auslosung wird vorbereitet …':'Du bist dabei!';$('studentSub').textContent='Alle eingecheckten Personen warten gemeinsam auf die Freigabe.';}
+    else {show('studentWaiting');show('waitingSidebar');hide('studentResult');$('studentHeading').textContent=data.state==='closing'?'Die Auslosung wird vorbereitet …':'Du bist dabei!';$('studentSub').textContent=data.state==='closing'?'Dein Check-in wurde übernommen. Die Auslosung wird vorbereitet.':'Dein Check-in wurde übernommen. Alle eingecheckten Personen warten gemeinsam auf die Freigabe.';}
   },e=>setStudentError('Status: '+message(e))));
   studentUnsubs.push(onSnapshot(collection(roundRef,'presence'),snap=>{
     const people=snap.docs.map(d=>d.data()).sort((a,b)=>namesSorter.compare(a.name,b.name));
@@ -278,15 +369,28 @@ function watchStudent(){
 let resultUnsub=null;
 function subscribeResult(){
   if(resultUnsub)return;
-  resultUnsub=onSnapshot(doc(db,'sharedRounds',studentRoundId,'results',user.uid),snap=>{
-    if(!snap.exists())return;
-    const result=snap.data();
-    if(result.authUid!==user.uid){setStudentError('Die Zuteilung stimmt nicht mit deiner Anmeldung überein.');return;}
-    const idx=wheelEpisodes.findIndex(e=>e.id===result.episodeId);
-    if(idx<0){setStudentError('Die freigegebene Episode ist nicht in der Radliste enthalten.');return;}
-    studentEpisode=result;
-    show('studentResult');renderWheel(wheelEpisodes,currentRotation);
-    if(!spinning){startWheel(idx,result);}
+  const subscribedRound=studentRoundId, subscribedUid=user.uid;
+  resultUnsub=onSnapshot(doc(db,'sharedRounds',subscribedRound,'results',subscribedUid),snap=>{
+    if(subscribedRound!==studentRoundId || subscribedUid!==user?.uid || !studentIdentity)return;
+    if(!snap.exists()){
+      $('spinningLabel').textContent='Deine freigegebene Episode wird geladen …';
+      return;
+    }
+    let assignment;
+    try{assignment=resolveStoredAssignment(snap.data(),wheelEpisodes,subscribedUid);}
+    catch(e){setStudentError(message(e));return;}
+    const assignmentKey=`${subscribedRound}:${subscribedUid}:${assignment.episodeId}`;
+    studentEpisode=snap.data();
+    show('studentResult');
+    // Wichtig: Die dauerhafte Textanzeige hängt ausschließlich an dem aus
+    // Firestore geladenen Ergebnis, NICHT am Animationsende oder an localStorage.
+    $('episodeName').textContent=assignment.label;
+    $('resultOwner').textContent=`Für ${studentIdentity.name}`;
+    show('myEpisode');
+    if(shownAssignment===assignmentKey)return;
+    shownAssignment=assignmentKey;
+    renderWheel(wheelEpisodes,currentRotation);
+    if(!spinning)startWheel(assignment.index,studentEpisode);
   },e=>setStudentError('Zuteilung: '+message(e)));
   studentUnsubs.push(()=>{resultUnsub?.();resultUnsub=null;});
 }
@@ -314,16 +418,16 @@ function renderWheel(episodes,rotation){
   ctx.fillStyle='#1b6670';ctx.font='bold 55px system-ui';ctx.textBaseline='middle';ctx.textAlign='center';ctx.fillText('✳',center,center+2);
 }
 function startWheel(index,result){
-  spinning=true;const key=`episoden-spun:${studentRoundId}:${user.uid}`;
+  spinning=true;const key=visitedWheelKey(studentRoundId,user.uid);
   const arc=2*Math.PI/wheelEpisodes.length;
   const desired=-(index+.5)*arc;
   const diff=(desired-(currentRotation%(2*Math.PI))+Math.PI*6)%(2*Math.PI);
   const start=currentRotation, target=start+Math.PI*2*5+diff;
-  let already=false;try { already=sessionStorage.getItem(key)==='1'; } catch { /* iFrame-Privatsphaere */ }
+  let already=false;try { already=localStorage.getItem(key)==='1'; } catch { /* Browser blockiert Speicherung */ }
   const duration=window.matchMedia('(prefers-reduced-motion: reduce)').matches||already?0:3200;
   $('spinningLabel').textContent=duration?'Das Glücksrad dreht …':'Auslosung abgeschlossen';
-  hide('myEpisode');
-  function finish(){currentRotation=target;renderWheel(wheelEpisodes,currentRotation);$('episodeName').textContent=result.episodeLabel;$('resultOwner').textContent=`Für ${studentIdentity.name}`;show('myEpisode');$('spinningLabel').textContent='Deine Episode wurde verbindlich zugeteilt.';try { sessionStorage.setItem(key,'1'); } catch { /* Browser blockiert Storage */ } spinning=false;}
+  // Ergebnisbox bleibt auch WÄHREND der Animation sichtbar.
+  function finish(){currentRotation=target;renderWheel(wheelEpisodes,currentRotation);$('spinningLabel').textContent='Deine Episode wurde verbindlich zugeteilt.';try { localStorage.setItem(key,'1'); } catch { /* Browser blockiert Speicherung */ } spinning=false;}
   if(!duration){finish();return;}
   const started=performance.now(),animationId=++activeAnimation;
   function frame(now){if(animationId!==activeAnimation)return;const p=Math.min((now-started)/duration,1),easing=1-Math.pow(1-p,4);currentRotation=start+(target-start)*easing;renderWheel(wheelEpisodes,currentRotation);if(p<1)requestAnimationFrame(frame);else finish();}

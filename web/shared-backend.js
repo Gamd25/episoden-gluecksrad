@@ -1,7 +1,7 @@
 // GitHub Pages + Cloud Firestore Spark. No Cloud Functions.
 // A shared link is an invitation, NOT proof that the typed name belongs to its user.
 import {
-  collection, doc, getDoc, getDocs, query, where, runTransaction,
+  collection, doc, getDoc, getDocs, getDocsFromServer, query, where, runTransaction,
   writeBatch, serverTimestamp, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js';
 import { balancedDraw } from './draw-logic.js';
@@ -117,7 +117,8 @@ export async function deleteRound(db,uid,rid){
   });
   // Delete children first and the parent last. Not atomic; retry if interrupted.
   for(const name of ['results','presence','authorized','names','view','gate']){
-    const snap=await getDocs(collection(db,'sharedRounds',rid,name));
+    // Bei Löschungen keine eventuell veralteten Offline-Cache-Ergebnisse verwenden.
+    const snap=await getDocsFromServer(collection(db,'sharedRounds',rid,name));
     for(let i=0;i<snap.docs.length;i+=100){
       const batch=writeBatch(db);
       snap.docs.slice(i,i+100).forEach(d=>batch.delete(d.ref));

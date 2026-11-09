@@ -1,11 +1,10 @@
-# START HIER – Gemeinsamer Klassenlink (GitHub Pages + Firebase Spark)
+# v6 – Schnellupdate ohne Node.js und ohne Blaze
 
-**Keine Installation von Node.js nötig.** Das vorhandene `episoden-gluecksrad`-Repository und das vorhandene Firebase-Projekt weiterverwenden. Das ursprüngliche `gefuehle-rad` bleibt unverändert.
+1. Entpacke `EpisodenGluecksrad_GitHub_Update_v6_2026-11-09.zip`.
+2. Im Repository `Gamd25/episoden-gluecksrad` **genau die enthaltenen vier Dateien** im Ordner `web/` aktualisieren: `app.js`, `index.html`, `style.css`, `shared-backend.js`. Die anderen Dateien, das alte `gefuehle-rad` und die Firestore-Regeln bleiben unverändert.
+3. GitHub → **Actions**: neuer grüner erfolgreicher Deploy **nach** dem Commit.
+4. Diese Adresse im Privatfenster öffnen: https://gamd25.github.io/episoden-gluecksrad/?release=v6-20261109
+5. OBEN muss **v6 · JS geladen** stehen. Fehlt dieser Schriftzug, wird keine v6-Datei ausgeführt und die vorherige Fehleranzeige kann aus altem Code stammen.
+6. Eine Testperson einchecken. In **Meine Auslosungen** den neuen Löschknopf **nur an einer eigens erzeugten Testrunde** ausprobieren. Exakt `LÖSCHEN` eingeben.
 
-1. Firebase Console → `episoden-gluecksrad` → **Cloud Firestore → Regeln**: `firestore.rules` vollständig in den Regeleditor kopieren und auf **Veröffentlichen** klicken. Die bisherigen `/rounds`-Regeln sind in dieser neuen Datei enthalten.
-2. In GitHub `Gamd25/episoden-gluecksrad` die fünf Dateien `web/index.html`, `web/app.js`, `web/style.css`, `web/shared-backend.js` und `web/shared-logic.js` aktualisieren/hinzufügen. Bei Bedarf GitHub Desktop nutzen, um Änderungen in einem Commit hochzuladen. `web/config.js` und `.github/workflows/pages.yml` unverändert lassen.
-3. GitHub → **Actions** prüfen: der Pages-Workflow muss ein grünes Häkchen haben.
-4. `https://gamd25.github.io/episoden-gluecksrad/` aufrufen, als Lehrperson anmelden, Test-Runde erstellen und einen **gemeinsamen Klassenlink** kopieren.
-5. Mit **erfundenen** Namen auf zwei anderen Browsern testen. Ein Name soll nur einmal funktionieren, die Teilnehmendenliste soll erst nach Check-in erscheinen, Ergebnisse erst nach ausdrücklichem Abschluss.
-
-**Unbedingt beachten:** Der gemeinsame Link + freie Namenseingabe identifiziert keine realen Schülerinnen und Schüler verlässlich. Ein unbefugter Mensch mit dem Link kann sich als jemand anders ausgeben. Die Lehrperson muss vor dem Abschluss die anwesenden Personen gegen die Check-in-Liste prüfen. Für produktiven Einsatz mit echten Schülernamen sind Datenschutzfreigabe, Regeltests und Identitätskonzept erforderlich.
+Hinweise: Keine Firebase-Regeländerung für diese Version. Die Oberfläche ist nicht live geprüft, sondern offline getestet. Vor Verwendung echter Namen Datenschutz/Identitätsprüfung berücksichtigen.

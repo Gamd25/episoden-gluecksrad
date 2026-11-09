@@ -23,3 +23,15 @@
 13. Testnamen und Testdaten nach Abschluss löschen.
 
 **Status:** Diese Firestore-/Web-Live- und Emulatorprüfungen sind noch NICHT durchgeführt. Bis dahin keine realen Schülerdaten eintragen.
+
+## Ergänzende v5-Abnahme: Check-in-Status
+
+1. Sichtbaren Marker **v5** im Kopfbereich der veröffentlichten GitHub-Pages-Anwendung prüfen. Fehlt er, ist v5 noch nicht wirksam veröffentlicht.
+2. Mit einer neuen Runde und erfundenem Namen in einem anonymen Browserfenster einchecken; Erfolgstext `Dein Check-in wurde übernommen.` und Präsenzliste auf dem Lehrgerät müssen übereinstimmen.
+3. Den Teilnehmer-Tab neu laden, dabei dieselbe anonyme Firebase-Sitzung behalten. Erfolgreicher Check-in darf nicht fälschlich als entfernt angezeigt werden.
+4. Lehrperson entfernt den Test-Check-in bei noch offener Runde. Erst nach tatsächlich erfolgter Löschung muss die Schüleransicht eine neutrale Inaktivitätsmeldung zeigen.
+5. Verbindungsunterbrechung / flüchtiger Cache-Fehlstand simulieren: keine voreilige Rücknahme des bereits bestätigten Check-ins.
+6. Auslosung normal abschließen, gespeichert zugeteilte Episode im selben Browser wieder anzeigen, ohne Neuzuteilung.
+7. Mit zweiter Browser-Identität den bereits belegten Namen prüfen: Duplicate darf nicht zu zweitem gültigem Check-in führen.
+
+Keine tatsächliche Emulator- oder Browser-Abnahme durch die vorliegenden Node.js-Tests behaupten.

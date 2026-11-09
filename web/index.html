@@ -6,12 +6,12 @@
   <meta name="theme-color" content="#152938">
   <meta name="description" content="Gemeinsamer Check-in und faire, synchronisierte Episodenzuteilung für Schulklassen.">
   <title>Episoden-Glücksrad</title>
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./style.css?v=6-20261109">
 </head>
 <body>
   <header class="site-header">
     <div class="brand"><span class="brand-icon">✳</span><span>EPISODEN<span class="brand-light">·RAD</span></span></div>
-    <div class="header-right"><span id="connection" class="connection" aria-live="polite">Verbinde …</span><button id="teacherNav" class="btn text-button" type="button">Lehrerbereich</button></div>
+    <div class="header-right"><span id="buildBadge" class="build-version" title="Stand der tatsächlich geladenen JavaScript-Anwendung">Lädt v6 …</span><span id="connection" class="connection" aria-live="polite">Verbinde …</span><button id="teacherNav" class="btn text-button" type="button">Lehrerbereich</button></div>
   </header>
   <main class="main">
     <section id="landing" class="landing card">
@@ -37,14 +37,14 @@
           </div>
           <div id="studentWaiting" class="hidden">
             <div class="waiting-check" aria-hidden="true">✓</div>
-            <div class="waiting-label">Erfolgreich eingecheckt</div>
+            <div class="waiting-label" role="status">Dein Check-in wurde übernommen.</div>
             <div class="person-display" id="selfName"></div>
             <p class="muted centered">Bitte warten. Die Lehrperson beendet den Check-in, sobald alle anwesenden Personen angemeldet sind.</p>
           </div>
           <div id="studentResult" class="hidden">
             <div class="wheel-area"><div class="wheel-pointer" aria-hidden="true"></div><canvas id="wheel" width="760" height="760" role="img" aria-label="Episoden-Glücksrad"></canvas></div>
             <div id="spinningLabel" class="spinning-label" aria-live="polite">Die Auslosung wurde freigegeben.</div>
-            <div id="myEpisode" class="result-box hidden" aria-live="polite"><span>DEINE EPISODE</span><strong id="episodeName"></strong><small id="resultOwner"></small></div>
+            <div id="myEpisode" class="result-box hidden" role="status" aria-live="polite"><span>DEINE ZUGETEILTE EPISODE</span><strong id="episodeName"></strong><small id="resultOwner"></small><p class="result-note">Diese Zuteilung bleibt gespeichert und erscheint beim erneuten Öffnen mit derselben Browser-Anmeldung wieder.</p></div>
           </div>
           <div id="studentError" class="alert error hidden" role="alert"></div>
         </div>
@@ -80,7 +80,11 @@
               <label for="classTitle">Bezeichnung der Runde</label>
               <input id="classTitle" type="text" maxlength="100" placeholder="z. B. DIG 2A – Gruppenarbeit" required>
               <div class="form-columns form-columns-one">
-                <div><label for="episodesInput">Episoden <span>ein Titel pro Zeile</span></label><textarea id="episodesInput" rows="8" required>Episode 1\nEpisode 2\nEpisode 3\nEpisode 4\nEpisode 5</textarea><small id="episodeInputCount" class="microcopy">5 Episoden</small></div>
+                <div><label for="episodesInput">Episoden <span>ein Titel pro Zeile</span></label><textarea id="episodesInput" rows="8" required>Episode 1
+Episode 2
+Episode 3
+Episode 4
+Episode 5</textarea><small id="episodeInputCount" class="microcopy">5 Episoden</small></div>
               </div>
               <p class="microcopy">Es ist keine Klassenliste erforderlich. Die Schülerinnen und Schüler geben ihre Namen selbst ein. Nur tatsächlich eingecheckte Personen nehmen an der Auslosung teil.</p>
               <button class="btn primary" id="createBtn" type="submit">Neue Runde erstellen <span aria-hidden="true">→</span></button>
@@ -115,6 +119,6 @@
     <div id="globalStatus" class="toast hidden" role="status" aria-live="polite"></div>
   </main>
   <footer class="footer">Episoden-Glücksrad · Getrennt vom ursprünglichen Gefühlskarten-Rad · Klassenlink nur an die vorgesehene Gruppe geben · Keine verifizierte Identität durch Namenseingabe</footer>
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js?v=6-20261109"></script>
 </body>
 </html>
